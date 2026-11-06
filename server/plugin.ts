@@ -3,7 +3,7 @@
  * (`npm run dev`) and preview server (`npm run start`).
  */
 import type { Plugin, PreviewServer, ViteDevServer } from 'vite'
-import { createCinetrackApi, resolveDataDir } from './api'
+import { createCinetrackApi, resolveDataDir } from './api.ts'
 
 export function cinetrackServer(options: { root: string; dataDir?: string }): Plugin {
   const dataDir = resolveDataDir(options.root, options.dataDir ?? process.env.CINETRACK_DATA_DIR)

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
-import { cinetrackServer } from './server/plugin'
+import { cinetrackServer } from './server/plugin.ts'
 
 const ROOT = import.meta.dirname
 const requestedPort = Number(process.env.PORT)
@@ -11,7 +11,8 @@ const PORT = Number.isInteger(requestedPort) && requestedPort > 0 && requestedPo
 const SECURITY_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  // Poster requests to image.tmdb.org carry no referrer.
+  'Referrer-Policy': 'no-referrer',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
@@ -53,8 +54,15 @@ export default defineConfig({
     },
     fs: {
       strict: true,
-      allow: [path.join(ROOT, 'src'), path.join(ROOT, 'index.html'), path.join(ROOT, 'node_modules')],
-      deny: ['.env', '.env.*', '*.{crt,pem,key}', '**/.git/**', '**/data/**', 'API.txt'],
+      allow: [
+        path.join(ROOT, 'src'),
+        path.join(ROOT, 'index.html'),
+        path.join(ROOT, 'node_modules/@fontsource'),
+        path.join(ROOT, 'node_modules/@fontsource-variable'),
+        path.join(ROOT, 'node_modules/vite/dist/client'),
+      ],
+      // Replaces Vite's defaults, so they are repeated here.
+      deny: ['.env', '.env.*', '*.{crt,pem,key,p12,pfx,cer,der}', '.npmrc', '.yarnrc.yml', '**/.git/**', '**/data/**', '**/*.sqlite*', 'API.txt'],
     },
     headers: { ...SECURITY_HEADERS, 'Content-Security-Policy': CSP_DIRECTIVES(true) },
   },
@@ -67,15 +75,16 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: false,
-    cssCodeSplit: true,
-    assetsInlineLimit: 4096,
-    chunkSizeWarningLimit: 500,
-    rollupOptions: {
+    // Source maps are generated for debugging but never referenced by the bundle.
+    sourcemap: 'hidden',
+    rolldownOptions: {
       output: {
+        // Only React gets its own long-cached chunk. recharts is reached solely
+        // through the lazy MonthlyChart import, so it already splits on its own;
+        // a manual "charts" group used to pull React into it and force a 365 kB
+        // preload on every page.
         manualChunks(id: string) {
-          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-') || id.includes('node_modules/victory-vendor')) return 'charts'
-          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'vendor'
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor'
           return undefined
         },
       },

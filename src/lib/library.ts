@@ -2,7 +2,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 import type { TmdbTitle } from './tmdb'
 import { titleOf, yearOf } from './tmdb'
 import { currentSettings } from './settings'
-import { setPersistenceState } from './persistence'
+import { setPersistenceState, unrefTimer } from './persistence'
 import { advanceRewatch, appendRewatchStamp, canSetDropped, MAX_REWATCHES, statusAfterEpisodeProgress, watchedAtAfterProgress, type Status } from './status'
 import {
   entryKey,
@@ -204,6 +204,7 @@ function scheduleDatabaseRetry() {
     databaseRetryTimer = null
     void flushDatabaseChanges()
   }, databaseRetryDelay)
+  unrefTimer(databaseRetryTimer)
   databaseRetryDelay = Math.min(databaseRetryDelay * 2, 30_000)
 }
 
@@ -401,6 +402,7 @@ async function hydrateFromSqlite() {
       hydrationTimer = null
       void hydrateFromSqlite()
     }, delay)
+    unrefTimer(hydrationTimer)
     return
   }
   hydrationRunning = false

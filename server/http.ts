@@ -11,8 +11,8 @@ export type Res = ServerResponse
 /** An error whose status and message are safe to show the client. */
 export class HttpError extends Error {
   status: number
-  constructor(status: number, message: string) {
-    super(message)
+  constructor(status: number, message: string, options?: { cause?: unknown }) {
+    super(message, options)
     this.status = status
   }
 }

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from 'react'
 import type { MediaType, TmdbTitle } from './lib/tmdb'
 import { useSetting } from './lib/settings'
 import {
@@ -21,7 +21,10 @@ import type { LibraryView } from './components/Library'
 const Home = lazy(() => import('./components/Home'))
 const Discover = lazy(() => import('./components/Discover'))
 const Library = lazy(() => import('./components/Library'))
-const TitleDetail = lazy(() => import('./components/TitleDetail'))
+/** One shared import, so the idle prefetch and React.lazy resolve the same module. */
+let titleDetailModule: Promise<typeof import('./components/TitleDetail')> | null = null
+const loadTitleDetail = () => (titleDetailModule ??= import('./components/TitleDetail'))
+const TitleDetail = lazy(loadTitleDetail)
 const SettingsPanel = lazy(() => import('./components/SettingsPanel'))
 
 const NAV: { id: Page; label: string; key: string }[] = [
@@ -47,9 +50,11 @@ function initialRoute(): Route {
 
 /** Warm the title drawer's chunk while idle so the first poster click is instant. */
 function prefetchTitleDetail() {
-  const load = () => void import('./components/TitleDetail')
-  if ('requestIdleCallback' in window) window.requestIdleCallback(load, { timeout: 4000 })
-  else setTimeout(load, 2000)
+  const load = () => void loadTitleDetail().catch(() => {
+    titleDetailModule = null // Let the next attempt (or the real open) retry.
+  })
+  if ('requestIdleCallback' in window) window.requestIdleCallback(load, { timeout: 2000 })
+  else setTimeout(load, 1000)
 }
 
 export default function App() {
@@ -59,8 +64,12 @@ export default function App() {
   const showNavHints = useSetting('showNavHints')
   /** Seed data for an opening title, so the drawer can paint before details load. */
   const seeds = useRef(new Map<string, TmdbTitle>())
+  // Route changes are transitions: React keeps the current screen up until the
+  // next view (e.g. the lazily loaded title drawer) is ready, instead of
+  // flashing a Suspense fallback and then swapping it out.
+  const [navigating, startNavigation] = useTransition()
+  /** Latest requested route, ahead of any transition still rendering it. */
   const routeRef = useRef(route)
-  routeRef.current = route
 
   /** Move to a new view, recording it in browser history. */
   const navigate = useCallback((next: Route, options: { replace?: boolean } = {}) => {
@@ -70,7 +79,8 @@ export default function App() {
     const state = { cinetrack: next, pushed: !options.replace || window.history.state?.pushed === true }
     if (options.replace) window.history.replaceState(state, '', url)
     else window.history.pushState(state, '', url)
-    setRoute(next)
+    routeRef.current = next
+    startNavigation(() => setRoute(next))
   }, [])
 
   /** Close an overlay: step back if the app opened it, otherwise replace. */
@@ -95,7 +105,8 @@ export default function App() {
         // A typed URL or a plain `#discover` link: adopt it as an app entry.
         window.history.replaceState({ cinetrack: next, pushed: true }, '', window.location.href)
       }
-      setRoute((current) => (sameRoute(current, next) ? current : next))
+      routeRef.current = next
+      startNavigation(() => setRoute((current) => (sameRoute(current, next) ? current : next)))
     }
     window.addEventListener('popstate', sync)
     window.addEventListener('hashchange', sync)
@@ -120,13 +131,21 @@ export default function App() {
     if (lastView.current === viewKey) return
     lastView.current = viewKey
     window.scrollTo({ top: 0 })
-    const frame = requestAnimationFrame(() => {
+    // Pages are lazy: wait (up to ~1 s) for the new view's heading to mount.
+    let frame = 0
+    let tries = 0
+    const focusView = () => {
       const heading = document.querySelector<HTMLElement>('#main-content h1')
+      if (!heading && tries++ < 60) {
+        frame = requestAnimationFrame(focusView)
+        return
+      }
       const target = heading ?? document.getElementById('main-content')
       if (!target) return
       if (heading && !heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1')
       target.focus({ preventScroll: true })
-    })
+    }
+    frame = requestAnimationFrame(focusView)
     return () => cancelAnimationFrame(frame)
   }, [viewKey])
 
@@ -187,6 +206,7 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <NavigationProgress active={navigating} />
       <a
         href="#main-content"
         onClick={(e) => {
@@ -322,7 +342,7 @@ export default function App() {
       </footer>
 
       <ErrorBoundary inline label="overlay" resetKey={`${route.title?.type}:${route.title?.id}:${route.settings}`}>
-        <Suspense fallback={route.title ? <DrawerFallback /> : null}>
+        <Suspense fallback={null}>
           {(settingsMounted || route.settings) && <SettingsPanel open={route.settings} onClose={() => setSettingsOpen(false)} />}
           {route.title && (
             <TitleDetail
@@ -340,13 +360,21 @@ export default function App() {
   )
 }
 
-/** Placeholder sheet while the title drawer's code downloads. */
-function DrawerFallback() {
+/** Thin progress bar while a navigation waits on code or data (shown only if it's slow). */
+function NavigationProgress({ active }: { active: boolean }) {
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    if (!active) {
+      setVisible(false)
+      return
+    }
+    const timer = window.setTimeout(() => setVisible(true), 150)
+    return () => window.clearTimeout(timer)
+  }, [active])
+  if (!visible) return null
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(20,19,15,0.42)]" aria-hidden="true">
-      <div className="flex h-full w-full max-w-[920px] items-center justify-center border-l border-border bg-background">
-        <Spinner size={32} />
-      </div>
+    <div role="progressbar" aria-label="Loading" className="fixed inset-x-0 top-0 z-[120] h-0.5 overflow-hidden bg-[var(--primary)]/20">
+      <div className="h-full w-1/3 animate-[ct-progress_900ms_ease-in-out_infinite] bg-[var(--primary)]" />
     </div>
   )
 }

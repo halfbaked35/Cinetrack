@@ -12,9 +12,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { createDatabase } from './database'
-import { handleLibrary, handleSettings } from './data-routes'
-import { createKeyResolver } from './env'
+import { createDatabase } from './database.ts'
+import { handleLibrary, handleSettings } from './data-routes.ts'
+import { createKeyResolver } from './env.ts'
 import {
   applyApiHeaders,
   HttpError,
@@ -25,8 +25,8 @@ import {
   sendJson,
   type Req,
   type Res,
-} from './http'
-import { createTmdbProxy } from './tmdb-proxy'
+} from './http.ts'
+import { createTmdbProxy } from './tmdb-proxy.ts'
 
 export type Logger = { info(message: string): void; warn(message: string): void; error(message: string): void }
 

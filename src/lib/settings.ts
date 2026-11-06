@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import { setPersistenceState } from './persistence'
+import { setPersistenceState, unrefTimer } from './persistence'
 import { STARTING_STATUS_IDS, type StartingStatus } from './status'
 import {
   type ThemeId,
@@ -342,6 +342,7 @@ function scheduleSettingsRetry() {
     settingsRetryTimer = null
     void flushSettingsChanges()
   }, settingsRetryDelay)
+  unrefTimer(settingsRetryTimer)
   settingsRetryDelay = Math.min(settingsRetryDelay * 2, 30_000)
 }
 
@@ -489,6 +490,7 @@ async function hydrateFromSqlite() {
       hydrationTimer = null
       void hydrateFromSqlite()
     }, delay)
+    unrefTimer(hydrationTimer)
     return
   }
   hydrationRunning = false

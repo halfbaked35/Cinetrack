@@ -319,11 +319,12 @@ function ShelfRow({
 
   // Publish this shelf's plates so a sibling shuffle never repeats one of them.
   useEffect(() => {
+    const registry = claims.current
     const keys = new Set(visible.map(plateKey))
-    claims.current.set(shelf.key, keys)
+    registry.set(shelf.key, keys)
     previousVisible.current = keys
     return () => {
-      claims.current.delete(shelf.key)
+      registry.delete(shelf.key)
     }
   }, [claims, shelf.key, visible])
 
@@ -493,7 +494,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             return { id, mediaType: mediaType as MediaType, title: get(mediaType as MediaType, id)?.title ?? '' }
           }).filter(Boolean) as { id: number; mediaType: MediaType; title: string }[]
         : [],
-    [seedSig, entries],
+    [seedSig, get],
   )
   const seedsRef = useRef(seeds)
   useEffect(() => { seedsRef.current = seeds }, [seeds])
@@ -680,7 +681,9 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
         ...(genre ? { with_genres: String(genre) } : {}),
       }, { signal }).then((r) => ({ ...r, results: r.results.map((x) => ({ ...x, media_type: type })) }))
     },
-    [searching, debounced, mode, type, sort, genre, settings.includeAdult, settings.metadataLanguage],
+    // Language and adult-content preferences are read inside the TMDb client;
+    // they are part of feedKey, which is what re-runs the feed.
+    [searching, debounced, mode, type, sort, genre],
   )
 
   const feedToken = useRef(0)
@@ -706,7 +709,10 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   const feedKeyRef = useRef(feedKey)
   feedKeyRef.current = feedKey
   const cachedFeed = gridActive ? feedCacheRef.current.get(feedKey) : undefined
-  const displayResults = activeFeedKey === feedKey ? results : cachedFeed?.results ?? []
+  const displayResults = useMemo(
+    () => (activeFeedKey === feedKey ? results : cachedFeed?.results ?? []),
+    [activeFeedKey, feedKey, results, cachedFeed],
+  )
   const visibleResults = useMemo(() => {
     if (mode !== 'trending') return displayResults
     const filtered = genre === null

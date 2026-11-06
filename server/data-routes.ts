@@ -5,9 +5,9 @@
  * plus checks only the server can make: full decoding of custom poster images
  * and status transitions that depend on the stored row.
  */
-import { isSafeKey, MAX_CHANGES_PER_REQUEST, normalizeKeyedEntry, type Entry } from '../src/lib/entry'
-import type { Database, SqlDatabase } from './database'
-import { HttpError, readJsonObject, sendError, sendJson, sendNoContent, type Req, type Res } from './http'
+import { isSafeKey, MAX_CHANGES_PER_REQUEST, normalizeKeyedEntry, type Entry } from '../src/lib/entry.ts'
+import type { Database, SqlDatabase } from './database.ts'
+import { HttpError, readJsonObject, sendError, sendJson, sendNoContent, type Req, type Res } from './http.ts'
 
 /** Clients chunk saves at 16 MB; anything far larger is not a CineTrack client. */
 const MAX_LIBRARY_BODY_BYTES = 32 * 1024 * 1024

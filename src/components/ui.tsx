@@ -430,7 +430,7 @@ export function handleRadioGroupKeyDown(event: React.KeyboardEvent<HTMLDivElemen
   const currentRadio = (event.target as HTMLElement).closest<HTMLButtonElement>('[role="radio"]')
   const current = currentRadio ? radios.indexOf(currentRadio) : -1
   if (!radios.length || current < 0) return
-  let next = current
+  let next: number
   if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % radios.length
   else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (current - 1 + radios.length) % radios.length
   else if (event.key === 'Home') next = 0
@@ -1175,6 +1175,7 @@ export function ConfirmDialog({
     setShown(false)
     if (leaveTimer.current) window.clearTimeout(leaveTimer.current)
     leaveTimer.current = window.setTimeout(() => setLeaving(true), 200)
+    return undefined
   }, [open])
 
   if (!open && leaving) return null

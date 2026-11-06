@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   details,
@@ -214,6 +214,8 @@ export default function TitleDetail({
   }, [displayTitle])
   const contentLang = metadataLanguage.split('-')[0] !== 'en' ? metadataLanguage : undefined
   const cast = data?.credits?.cast ?? []
+  // Stable identity so the season list doesn't re-run its effects every render.
+  const airedSeasons = useMemo(() => data?.seasons?.filter((s) => s.episode_count > 0) ?? [], [data])
 
   // Hero plate. The stored poster wins over the fetched one so a shelf that has
   // art never loses it to a detail response that came back bare.
@@ -617,7 +619,7 @@ export default function TitleDetail({
                   <Seasons
                     key={id}
                     showId={id}
-                    seasons={data.seasons.filter((s) => s.episode_count > 0)}
+                    seasons={airedSeasons}
                     watched={entry?.rewatching ? entry.rewatchEpisodes : entry?.episodes ?? {}}
                     tracked={!!entry && (entry.status !== 'watched' || entry.rewatching)}
                     completed={isCompletedAtLeastOnce(entry)}
@@ -2052,9 +2054,12 @@ function Seasons({
   onBulk: (s: number, nums: number[], watched: boolean) => void
 }) {
   const { settings } = useSettings()
-  const ordered = [...seasons].sort((a, b) =>
-    a.season_number === 0 ? 1 : b.season_number === 0 ? -1 : a.season_number - b.season_number,
-  ).filter((season) => settings.showSpecials || season.season_number !== 0)
+  const ordered = useMemo(
+    () => [...seasons].sort((a, b) =>
+      a.season_number === 0 ? 1 : b.season_number === 0 ? -1 : a.season_number - b.season_number,
+    ).filter((season) => settings.showSpecials || season.season_number !== 0),
+    [seasons, settings.showSpecials],
+  )
   const lastMarkedEpisode = Object.entries(watched).reduce<{ season: number; episode: number; at: number } | null>((latest, [key, at]) => {
     const [seasonText, episodeText] = key.split('-')
     const season = Number(seasonText)
@@ -2104,7 +2109,7 @@ function Seasons({
     ) return
     didSelectProgressSeasonRef.current = true
     setOpen(lastMarkedSeason)
-  }, [continueFromProgress, lastMarkedSeason, settings.showSpecials])
+  }, [continueFromProgress, lastMarkedSeason, ordered])
 
   useEffect(() => {
     if (visibleOpen == null) {
@@ -2155,6 +2160,8 @@ function Seasons({
       top,
       behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     })
+    // Keyed on the episode's coordinates, not the object rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [continueFromProgress, panelSettled, episodes, lastMarkedEpisode?.season, lastMarkedEpisode?.episode, visibleOpen])
 
   const seenIn = (s: { season_number: number; episode_count: number }) => {

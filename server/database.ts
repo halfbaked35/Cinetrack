@@ -13,7 +13,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { HttpError } from './http'
+import { HttpError } from './http.ts'
 
 /** The slice of the sql.js Database API this server uses. */
 export type SqlStatement = {
@@ -206,7 +206,7 @@ export function createDatabase(options: { dataDir: string; wasmPath: string; max
       try {
         bytes = fs.readFileSync(file)
       } catch (error) {
-        throw new Error(`Database file is unreadable: ${(error as Error).message}`)
+        throw new Error(`Database file is unreadable: ${(error as Error).message}`, { cause: error })
       }
     }
     let db: SqlDatabase
@@ -216,7 +216,7 @@ export function createDatabase(options: { dataDir: string; wasmPath: string; max
       migrate(db)
     } catch (error) {
       // Keep the sole copy intact and fail the request instead.
-      throw new HttpError(500, `The database file is damaged and was left untouched (${(error as Error).message}).`)
+      throw new HttpError(500, `The database file is damaged and was left untouched (${(error as Error).message}).`, { cause: error })
     }
     handle = { db, stamp }
     return db

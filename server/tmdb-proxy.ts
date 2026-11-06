@@ -7,7 +7,7 @@
  * - Upstream calls carry a timeout, never follow redirects, and are retried
  *   once on transport faults only.
  */
-import { HttpError, sendError, sendJson, type Req, type Res } from './http'
+import { HttpError, sendError, sendJson, type Req, type Res } from './http.ts'
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const ALLOWED_PREFIXES = ['/search/', '/discover/', '/trending/', '/movie/', '/tv/', '/genre/', '/person/']

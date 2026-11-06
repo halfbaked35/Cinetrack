@@ -42,12 +42,11 @@ data/*.sqlite3
 data/*.sqlite3-*
 data/*.db
 data/*.db-*
+data/*.sqlite.*
+data/.cinetrack.lock
+data/.database.sqlite.*.tmp
 API.txt
 Thumbs.db
 
-# Tests
-test/
-tests/
-**/__tests__/
-*.test.*
-*.spec.*
+# Local tooling
+.claude/

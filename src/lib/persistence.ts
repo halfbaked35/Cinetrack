@@ -27,3 +27,8 @@ function subscribe(listener: () => void) {
 export function usePersistenceState() {
   return useSyncExternalStore(subscribe, getPersistenceState, getPersistenceState)
 }
+
+/** Background retries must not keep a non-browser process (tests, SSR) alive. */
+export function unrefTimer(timer: ReturnType<typeof setTimeout> | null) {
+  ;(timer as { unref?: () => void } | null)?.unref?.()
+}

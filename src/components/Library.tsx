@@ -363,6 +363,7 @@ function FilterBar({
     setShown(false)
     if (leaveTimer.current) window.clearTimeout(leaveTimer.current)
     leaveTimer.current = window.setTimeout(() => setLeaving(true), 200)
+    return undefined
   }, [open, updatePosition])
 
   const active = filter !== 'all' || sort !== settings.defaultSort || minRating > 0

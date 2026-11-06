@@ -37,6 +37,7 @@ export function SaveStatus() {
       const timer = window.setTimeout(() => setJustSaved(false), 2000)
       return () => window.clearTimeout(timer)
     }
+    return undefined
   }, [state, showSaving])
 
   // Announce each new save problem once.

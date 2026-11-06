@@ -5,8 +5,8 @@
  * the local API server share one definition of what a valid record is. Any
  * rule changed here applies to both sides at once.
  */
-import { isSafeCustomPosterDataUrl } from './custom-poster'
-import { MAX_REWATCHES, STATUS_IDS, type Status } from './status'
+import { isSafeCustomPosterDataUrl } from './custom-poster.ts'
+import { MAX_REWATCHES, STATUS_IDS, type Status } from './status.ts'
 
 export type MediaType = 'movie' | 'tv'
 

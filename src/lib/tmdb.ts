@@ -302,7 +302,7 @@ export async function tmdb<T>(  path: string,
         // and a dropped connection (fetch rejects with a TypeError). A killed dev
         // server or a reset socket was a permanent-looking error until this.
         if (attempt === 0 && (err.name === 'AbortError' || err instanceof TypeError)) continue
-        if (err.name === 'AbortError') throw new Error('TMDb request timed out — please retry')
+        if (err.name === 'AbortError') throw new Error('TMDb request timed out — please retry', { cause: e })
         throw e
       }
     }
@@ -330,6 +330,7 @@ export async function tmdb<T>(  path: string,
  *  characters only, hard-capped, before it can reach an Error message/toast. */
 function sanitizeUpstreamText(value: unknown, max = 300): string | undefined {
   if (typeof value !== 'string') return undefined
+  // eslint-disable-next-line no-control-regex -- stripping control characters is the point
   const cleaned = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, max)
   return cleaned || undefined
 }
