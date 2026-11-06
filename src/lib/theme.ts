@@ -45,7 +45,7 @@ export type ThemeMeta = {
 
 export const THEMES: readonly ThemeMeta[] = [
   { id: 'paper', name: 'Paper', description: 'White and oxblood red', tone: 'light', themeColor: '#ffffff' },
-  { id: 'noir', name: 'Noir', description: 'Graphite and crimson', tone: 'dark', themeColor: '#161618' },
+  { id: 'noir', name: 'Noir', description: 'Graphite and crimson', tone: 'dark', themeColor: '#0e0e10' },
 ]
 
 export function isThemeId(value: unknown): value is ThemeId {

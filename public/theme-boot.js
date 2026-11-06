@@ -2,7 +2,7 @@
 // light while settings load from the local database. Written by
 // src/lib/theme.ts; every value is re-validated here before use.
 ;(function () {
-  var THEMES = { paper: '#ffffff', noir: '#161618' }
+  var THEMES = { paper: '#ffffff', noir: '#0e0e10' }
   // Themes retired in earlier redesigns map to the light or dark theme.
   var RETIRED = {
     porcelain: 'paper', frost: 'paper', dawn: 'paper', matinee: 'paper', gallery: 'paper', blueprint: 'paper', custom: 'paper',

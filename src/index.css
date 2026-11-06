@@ -359,39 +359,44 @@ html {
    it scrolls into frame. Content is visible by default; motion is added
    only where the browser supports scroll timelines and motion is welcome.
    ------------------------------------------------------------------ */
-.credit-footage {
-  mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
-}
-@keyframes ct-marquee {
+/* The curved poster row (TiltedGridHero): each tile turns round the
+   cylinder's axis. Geometry comes from per-tile custom properties, so no
+   per-instance <style> is needed (the CSP forbids injected styles). */
+@keyframes tgh-orbit {
+  from {
+    transform: translateZ(var(--tgh-r)) rotateY(calc(var(--tgh-sweep) * -1)) translateZ(calc(var(--tgh-r) * -1));
+  }
   to {
-    transform: translate3d(-50%, 0, 0);
+    transform: translateZ(var(--tgh-r)) rotateY(var(--tgh-sweep)) translateZ(calc(var(--tgh-r) * -1));
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  /* Paused, not removed: every tile is already placed by its delay, so the row freezes as a still. */
+  .tgh-tile {
+    animation-play-state: paused !important;
+    /* Keep the real duration: the app-wide reduced-motion rule shortens it to 1ms, which would stack every tile. */
+    animation-duration: var(--tgh-duration) !important;
+  }
+}
+/* Opacity and transform only: both run on the compositor, so scrolling
+   never repaints text (an animated blur did, every frame). */
 @keyframes ct-credit {
   from {
     opacity: 0;
-    filter: blur(10px);
     transform: translate3d(0, 28px, 0);
   }
   to {
     opacity: 1;
-    filter: blur(0);
     transform: none;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .credit-marquee {
-    animation: ct-marquee 90s linear infinite;
-  }
-  .credit-footage:hover .credit-marquee {
-    animation-play-state: paused;
-  }
   @supports (animation-timeline: view()) {
     .credit-reveal {
       animation: ct-credit linear both;
       animation-timeline: view();
-      /* Settled by the time the piece is fully in frame. */
-      animation-range: entry 0% entry 100%;
+      /* Settled after a fixed travel, so tall blocks never sit blurred while read. */
+      animation-range: entry 0% entry 280px;
     }
     .chart-scroll-draw {
       stroke-dasharray: 1;

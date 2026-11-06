@@ -2,7 +2,7 @@
  * CineTrack themes — one light, one dark.
  *
  *   Paper (light)  true white stock, oxblood-red ink   (default)
- *   Noir  (dark)   dark graphite, cinema crimson tuned for dark
+ *   Noir  (dark)   near-black graphite, cinema crimson tuned for dark
  *
  * Paper is the original CineTrack theme, restored from src/theme-backup/
  * with its colours unchanged except a brighter accent (#a32d1e, was
@@ -76,13 +76,13 @@
 
 [data-theme='noir'] {
   color-scheme: dark;
-  --background: #161618;
+  --background: #0e0e10;
   --foreground: #f4f2ee;
-  --card: #1e1e21;
+  --card: #17171a;
   --card-foreground: #f4f2ee;
-  --muted: #222225;
+  --muted: #1b1b1e;
   --muted-foreground: #a8a6ad;
-  --secondary: #2a2a2e;
+  --secondary: #232327;
   --secondary-foreground: #d9d6d0;
   --primary: #d62d48;
   --primary-foreground: #ffffff;
@@ -90,16 +90,16 @@
   --accent-foreground: #ffffff;
   --destructive: #f47a6e;
   --destructive-foreground: #1a0907;
-  --border: #2d2d31;
-  --border-strong: #414146;
+  --border: #26262a;
+  --border-strong: #3a3a3f;
   --ring: #d62d48;
   --toast-info: #8fb3f3;
   --toast-success: #7ccfa2;
   --toast-warning: #f0c76a;
   --toast-error: #f79c92;
-  --toast-on: #161618;
+  --toast-on: #0e0e10;
   --status-planned: #a3a0a8;
-  --status-planned-foreground: #161618;
+  --status-planned-foreground: #0e0e10;
   --status-planned-ink: #b0adb5;
   --status-watching: #7fa7f0;
   --status-watching-foreground: #0a1120;

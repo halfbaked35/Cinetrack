@@ -5,6 +5,7 @@ import { monotoneSegments } from '../lib/curve'
 import type { Page } from '../lib/route'
 import { Poster, PosterSkeleton } from './ui'
 import { ErrorNotice } from './Errors'
+import { TiltedGridHero } from './TiltedGridHero'
 
 const SOURCE_URL = 'https://github.com/halfbaked35/Cinetrack'
 
@@ -97,7 +98,7 @@ export default function Landing({
 
 function TitleCard({ footage, loading, onNavigate }: { footage: TmdbTitle[]; loading: boolean; onNavigate: (page: Page) => void }) {
   return (
-    <section className="relative flex flex-col items-center justify-center overflow-hidden px-4 pt-16 text-center sm:min-h-[calc(100svh-57px)] sm:justify-between sm:pt-[12vh] lg:px-6">
+    <section className="relative flex flex-col items-center justify-center overflow-x-clip px-4 pt-16 text-center sm:min-h-[calc(100svh-57px)] sm:justify-between sm:pt-[8vh] lg:px-6">
       <div className="flex flex-col items-center">
         <h1 className="animate-rise font-display leading-[0.86] tracking-[-0.03em] text-foreground text-[clamp(76px,13.5vw,212px)]">
           <em className="text-[var(--primary)]">Cine</em>Track
@@ -111,7 +112,7 @@ function TitleCard({ footage, loading, onNavigate }: { footage: TmdbTitle[]; loa
         </div>
       </div>
 
-      <div className="w-[calc(100%+2rem)] pb-8 pt-14 lg:w-[calc(100%+3rem)]">
+      <div className="w-[calc(100%+2rem)] pb-8 lg:w-[calc(100%+3rem)]">
         <Footage items={footage} loading={loading} />
         <button
           type="button"
@@ -131,42 +132,34 @@ function TitleCard({ footage, loading, onNavigate }: { footage: TmdbTitle[]; loa
   )
 }
 
-/** A slow, endless strip of trending posters: the shot the titles sit over. */
+/**
+ * This week's trending posters on a curved, endlessly turning row: the
+ * opening shot the titles sit over. Placeholder plates hold the shape while
+ * the artwork loads; the row is decorative (aria-hidden inside).
+ */
 function Footage({ items, loading }: { items: TmdbTitle[]; loading: boolean }) {
-  if (!loading && items.length === 0) return null
-  const frames = loading ? Array.from({ length: 12 }, () => null) : [...items, ...items]
-  return (
-    <div aria-hidden="true" className="credit-footage overflow-hidden">
-      <div className={`flex w-max gap-3 ${loading ? '' : 'credit-marquee'}`}>
-        {frames.map((item, index) =>
-          item ? (
-            <FadeImage
-              key={`${item.media_type}-${item.id}-${index}`}
-              src={img(item.poster_path, 'w185')}
-              className="aspect-[2/3] w-[clamp(76px,8.4vw,124px)] shrink-0 border border-[var(--poster-edge)] bg-muted object-cover"
-            />
-          ) : (
-            <span key={index} className="aspect-[2/3] w-[clamp(76px,8.4vw,124px)] shrink-0 bg-muted" />
-          ),
-        )}
-      </div>
-    </div>
+  // TMDb's landscape cover art (backdrops), which suits a wide, cinematic row.
+  const images = useMemo(
+    () => items.flatMap((item) => {
+      const src = img(item.backdrop_path, 'w780')
+      return src ? [{ src }] : []
+    }),
+    [items],
   )
-}
-
-function FadeImage({ src, className }: { src: string | null; className: string }) {
-  const [loaded, setLoaded] = useState(false)
-  if (!src) return <span className={className} />
+  if (!loading && images.length === 0) return null
   return (
-    <img
-      src={src}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      width={185}
-      height={278}
-      onLoad={() => setLoaded(true)}
-      className={`${className} transition-opacity duration-500 ease-out ${loaded ? 'opacity-100' : 'opacity-0'}`}
+    <TiltedGridHero
+      images={images}
+      aspectRatio={16 / 9}
+      tileHeight={50}
+      axis={50}
+      gap={4}
+      curve={62}
+      fade={10}
+      speed={3.5}
+      // Wide tiles span enough arc to need a few facets to read as curved.
+      slices={6}
+      className="h-[clamp(300px,46vh,560px)] w-full"
     />
   )
 }
@@ -272,33 +265,66 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 function SampleYear() {
   const gradient = useId().replace(/:/g, '')
+  const [active, setActive] = useState<number | null>(null)
   const W = 720
   const H = 220
   const top = 12
-  const { line, area, peak } = useMemo(() => {
+  const { line, area, points, peakIndex } = useMemo(() => {
     const max = 12
     const points = SAMPLE_YEAR.map((count, i) => ({ x: (i / (SAMPLE_YEAR.length - 1)) * W, y: 24 + (H - 24) - (count / max) * (H - 24) }))
     const segments = monotoneSegments(points)
     const first = points[0]!
     const last = points[points.length - 1]!
-    const peakIndex = SAMPLE_YEAR.indexOf(Math.max(...SAMPLE_YEAR))
     return {
+      points,
       line: `M${first.x},${first.y}${segments.join('')}`,
       area: `M${first.x},${H}L${first.x},${first.y}${segments.join('')}L${last.x},${H}Z`,
-      peak: { ...points[peakIndex]!, count: SAMPLE_YEAR[peakIndex]!, month: MONTHS[peakIndex]! },
+      peakIndex: SAMPLE_YEAR.indexOf(Math.max(...SAMPLE_YEAR)),
     }
   }, [])
   const total = SAMPLE_YEAR.reduce((sum, n) => sum + n, 0)
+  const peak = points[peakIndex]!
+  const tip = active == null ? null : points[active]!
+
+  const pick = (event: React.PointerEvent<SVGSVGElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    if (box.width <= 0) return
+    const ratio = (event.clientX - box.left) / box.width
+    setActive(Math.min(SAMPLE_YEAR.length - 1, Math.max(0, Math.round(ratio * (SAMPLE_YEAR.length - 1)))))
+  }
 
   return (
     <figure className="w-full max-w-[760px] text-left">
       <div className="flex items-baseline justify-between gap-4 border-b border-border pb-2.5">
         <span className="rule-label">Monthly log · sample year</span>
-        <span className="font-sans text-[12px] tabular-nums text-muted-foreground">
-          <span className="text-foreground">{total}</span> titles · busiest {peak.month}
+        <span className="font-sans text-[12px] tabular-nums text-muted-foreground" aria-live="polite">
+          {active == null ? (
+            <>
+              <span className="text-foreground">{total}</span> titles · busiest {MONTHS[peakIndex]}
+            </>
+          ) : (
+            <>
+              {MONTHS[active]} · <span className="text-foreground">{SAMPLE_YEAR[active]}</span> {SAMPLE_YEAR[active] === 1 ? 'title' : 'titles'}
+            </>
+          )}
         </span>
       </div>
-      <svg viewBox={`0 -${top} ${W} ${H + top}`} className="mt-6 block h-auto w-full overflow-visible" role="img" aria-label={`Sample year: ${total} titles completed, busiest in ${peak.month} with ${peak.count}.`}>
+      <svg
+        viewBox={`0 -${top} ${W} ${H + top}`}
+        tabIndex={0}
+        role="img"
+        aria-label={`Sample year: ${total} titles completed, busiest in ${MONTHS[peakIndex]} with ${SAMPLE_YEAR[peakIndex]}. Use the arrow keys to read each month.`}
+        onPointerMove={pick}
+        onPointerLeave={() => setActive(null)}
+        onBlur={() => setActive(null)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return
+          event.preventDefault()
+          const step = event.key === 'ArrowRight' ? 1 : -1
+          setActive((i) => Math.min(SAMPLE_YEAR.length - 1, Math.max(0, (i ?? (step > 0 ? -1 : SAMPLE_YEAR.length)) + step)))
+        }}
+        className="mt-6 block h-auto w-full cursor-crosshair overflow-visible outline-offset-4 touch-pan-y"
+      >
         <defs>
           <linearGradient id={gradient} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.22" />
@@ -311,17 +337,26 @@ function SampleYear() {
         <line x1="0" x2={W} y1={H} y2={H} stroke="var(--border)" />
         <path d={area} fill={`url(#${gradient})`} />
         <path d={line} fill="none" stroke="var(--primary)" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" pathLength={1} className="chart-scroll-draw" vectorEffect="non-scaling-stroke" />
-        <circle cx={peak.x} cy={peak.y} r="4.5" fill="var(--primary)" stroke="var(--background)" strokeWidth="2" />
-        <text x={peak.x} y={peak.y - 14} textAnchor="middle" className="fill-[var(--primary)] font-display text-[22px]">
-          {peak.count}
-        </text>
+        {tip ? (
+          <g>
+            <line x1={tip.x} x2={tip.x} y1={-top} y2={H} stroke="var(--foreground)" strokeOpacity="0.18" />
+            <circle cx={tip.x} cy={tip.y} r="5" fill="var(--background)" stroke="var(--primary)" strokeWidth="2.25" />
+          </g>
+        ) : (
+          <g>
+            <circle cx={peak.x} cy={peak.y} r="4.5" fill="var(--primary)" stroke="var(--background)" strokeWidth="2" />
+            <text x={peak.x} y={peak.y - 14} textAnchor="middle" className="fill-[var(--primary)] font-display text-[22px]">
+              {SAMPLE_YEAR[peakIndex]}
+            </text>
+          </g>
+        )}
       </svg>
       <div aria-hidden="true" className="mt-3 flex justify-between font-sans text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
         {MONTHS.map((m, i) => (
-          <span key={m} className={i % 2 === 1 ? 'max-sm:invisible' : ''}>{m}</span>
+          <span key={m} className={`transition-colors ${active === i ? 'text-foreground' : ''} ${i % 2 === 1 ? 'max-sm:invisible' : ''}`}>{m}</span>
         ))}
       </div>
-      <figcaption className="mt-4 font-sans text-[12px] text-muted-foreground">Sample data. Home draws this from the titles you finish.</figcaption>
+      <figcaption className="mt-4 font-sans text-[12px] text-muted-foreground">Sample data. Home draws this from the titles you finish; point at a month to read it.</figcaption>
     </figure>
   )
 }
@@ -354,9 +389,9 @@ function EndCredits({ onNavigate }: { onNavigate: (page: Page) => void }) {
         <h2 id="end-credits-title" className="credit-reveal font-display text-[clamp(40px,5vw,72px)] italic leading-none tracking-[-0.02em]">
           End credits
         </h2>
-        <dl className="credit-reveal mt-14 w-full space-y-4 text-left">
+        <dl className="mt-14 w-full space-y-4 text-left">
           {ROLL.map(({ role, credit }) => (
-            <div key={role} className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-0">
+            <div key={role} className="credit-reveal flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-0">
               <dt className="rule-label shrink-0 sm:w-28 sm:text-right">{role}</dt>
               <span aria-hidden="true" className="mx-4 hidden min-w-8 flex-1 translate-y-[-3px] border-b border-dotted border-[var(--border-strong)] sm:block" />
               <dd className="text-[15px] leading-snug text-foreground sm:max-w-[60%] sm:text-right">{credit}</dd>
@@ -386,7 +421,7 @@ function PrimaryAction({ onClick, children }: { onClick: () => void; children: R
     <button
       type="button"
       onClick={onClick}
-      className="press group inline-flex h-11 items-center gap-2.5 border border-[var(--primary)] bg-[var(--primary)] px-6 font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-primary-foreground transition-[filter] hover:brightness-110"
+      className="press group inline-flex h-11 items-center justify-center gap-2.5 border border-[var(--primary)] bg-[var(--primary)] px-6 max-sm:w-full max-sm:max-w-[18rem] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-primary-foreground transition-[filter] hover:brightness-110"
     >
       {children}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="transition-transform duration-200 ease-out group-hover:translate-x-0.5">
@@ -401,7 +436,7 @@ function SecondaryAction({ onClick, children }: { onClick: () => void; children:
     <button
       type="button"
       onClick={onClick}
-      className="press inline-flex h-11 items-center border border-border px-6 font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-foreground transition-colors hover:border-[var(--foreground)]"
+      className="press inline-flex h-11 items-center justify-center border border-border px-6 max-sm:w-full max-sm:max-w-[18rem] font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-foreground transition-colors hover:border-[var(--foreground)]"
     >
       {children}
     </button>
