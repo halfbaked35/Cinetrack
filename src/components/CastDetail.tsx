@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { img, person, personCredits, type MediaType, type PersonCredit, type PersonDetail } from '../lib/tmdb'
+import { img, isNotFoundError, person, personCredits, type MediaType, type PersonCredit, type PersonDetail } from '../lib/tmdb'
 import { useSettings } from '../lib/settings'
 import { CloseButton, PosterTilt, Spinner, useFocusTrap } from './ui'
+import { ErrorState, NotFound } from './Errors'
 
 const creditTitle = (c: PersonCredit) => c.title ?? c.name ?? 'Untitled'
 /** First billed role only — full slash-lists ("A / B / C (Voice)") blow out rows. */
@@ -31,6 +32,7 @@ export default function CastDetail({
   const [data, setData] = useState<PersonDetail | null>(null)
   const [credits, setCredits] = useState<PersonCredit[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [shown, setShown] = useState(false)
   const boxRef = useRef<HTMLDivElement | null>(null)
@@ -52,6 +54,7 @@ export default function CastDetail({
     setData(null)
     setCredits([])
     setError(null)
+    setNotFound(false)
     Promise.all([person(personId, { signal: controller.signal }), personCredits(personId, { signal: controller.signal })])
       .then(([p, c]) => {
         if (!live) return
@@ -59,7 +62,9 @@ export default function CastDetail({
         setCredits([...(c.cast ?? [])].sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0)).slice(0, 12))
       })
       .catch((e) => {
-        if (live) setError(e instanceof Error ? e.message : 'Failed to load cast file')
+        if (!live) return
+        setError(e instanceof Error ? e.message : 'Failed to load cast file')
+        setNotFound(isNotFoundError(e))
       })
     return () => {
       live = false
@@ -126,18 +131,24 @@ export default function CastDetail({
         </header>
 
         <div className="quiet-scroll min-h-0 flex-1 overflow-y-auto px-4.5 py-4">
-          {error && !data && (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
-              <p className="rule-label">Cast file failed to load · {error}</p>
-              <button
-                type="button"
-                onClick={() => setAttempt((a) => a + 1)}
-                className="press border border-border px-5 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)]"
-              >
-                Retry
-              </button>
-            </div>
-          )}
+          {error && !data && (notFound ? (
+            <NotFound
+              size="panel"
+              title="This person isn’t on TMDb"
+              message="Their profile may have been removed or merged with another."
+              actions={[{ label: 'Close', onClick: close }]}
+            />
+          ) : (
+            <ErrorState
+              size="panel"
+              title="This profile couldn’t load"
+              message={error}
+              actions={[
+                { label: 'Retry', onClick: () => setAttempt((a) => a + 1) },
+                { label: 'Close', onClick: close },
+              ]}
+            />
+          ))}
           {!error && !data && (
             <div className="flex items-center justify-center py-16">
               <Spinner size={30} />

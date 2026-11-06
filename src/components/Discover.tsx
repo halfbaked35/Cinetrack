@@ -12,6 +12,7 @@ import {
 import { useLibrary } from '../lib/library'
 import { useSettings, useSettingsHydrated } from '../lib/settings'
 import { Chip, Empty, Poster, PosterGrid, PosterSkeleton, SearchInput, SectionHead, ShuffleIcon, Spinner } from './ui'
+import { ErrorNotice } from './Errors'
 
 type Mode = 'suggested' | 'trending' | 'movie' | 'tv'
 
@@ -356,7 +357,7 @@ function SuggestionSection({
         return [...picked.filter((item) => !held.has(plateKey(item))), ...prev].slice(0, SECTION_POOL_CAP)
       })
     } catch {
-      if (!controller.signal.aborted) setRefreshError('Could not refresh this section. Check your connection and retry.')
+      if (!controller.signal.aborted) setRefreshError('Check your connection and try again.')
     } finally {
       busyRef.current = false
       setBusy(false)
@@ -393,12 +394,7 @@ function SuggestionSection({
         </button>
       </div>
       {refreshError && (
-        <div role="alert" className="mb-3 flex items-center justify-between gap-3 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-3 py-2">
-          <p className="font-sans text-[12px] text-[var(--primary)]">{refreshError}</p>
-          <button type="button" disabled={busy} onClick={() => void refresh()} className="press shrink-0 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--primary)] underline underline-offset-4 disabled:opacity-60">
-            Retry
-          </button>
-        </div>
+        <ErrorNotice className="mb-3" title="This section couldn’t refresh" message={refreshError} onRetry={() => void refresh()} busy={busy} />
       )}
       <PosterGrid columns={columns}>
         {visible.map((item, index) => {
@@ -774,7 +770,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
         if (token !== feedToken.current || controller.signal.aborted) return
         const message = e instanceof Error && e.message !== 'Request cancelled'
           ? e.message
-          : 'Could not load titles. Check your connection and retry.'
+          : 'Check your connection and try again.'
         errorRef.current = message
         setError(message)
         setRetryPage(requestedPage)
@@ -925,16 +921,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
       {!gridActive ? (
         <>
           {sectionsError && (
-            <div role="alert" className="animate-fade flex items-center justify-between gap-4 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
-              <p className="font-sans text-[12px] text-[var(--primary)]">{sectionsError}</p>
-              <button
-                type="button"
-                onClick={() => setSectionRetry((n) => n + 1)}
-                className="press shrink-0 border border-[var(--primary)] bg-[var(--primary)] px-3 py-1 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90"
-              >
-                Retry
-              </button>
-            </div>
+            <ErrorNotice title="Suggestions couldn’t load" message={sectionsError} onRetry={() => setSectionRetry((n) => n + 1)} />
           )}
           {sectionsLoading && sections.length === 0 && !sectionsError && (
             <div className="flex min-h-[50vh] items-center justify-center py-12 animate-fade" aria-live="polite">
@@ -953,17 +940,12 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
       ) : (
         <>
           {displayError && (
-            <div role="alert" className="animate-fade flex items-center justify-between gap-4 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
-              <p className="font-sans text-[12px] text-[var(--primary)]">{displayError}</p>
-              <button
-                type="button"
-                onClick={() => requestPage(retryPage ?? 1, feedToken.current)}
-                disabled={gridLoading}
-                className="press shrink-0 border border-[var(--primary)] bg-[var(--primary)] px-3 py-1 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
-              >
-                Retry
-              </button>
-            </div>
+            <ErrorNotice
+              title="Titles couldn’t load"
+              message={displayError}
+              onRetry={() => requestPage(retryPage ?? 1, feedToken.current)}
+              busy={gridLoading}
+            />
           )}
           {!gridLoading && !displayError && visibleResults.length === 0 && (
             <Empty>

@@ -3,6 +3,7 @@ import { hasUnsavedLibraryChanges, retryLibraryLoad, useLibraryStatus } from '..
 import { usePersistenceState } from '../lib/persistence'
 import { hasUnsavedSettingsChanges } from '../lib/settings'
 import { useToast } from './Toast'
+import { ErrorNotice } from './Errors'
 
 /**
  * Header save indicator. Quiet when everything is saved, visible while a
@@ -89,19 +90,12 @@ export function LoadErrorBanner() {
   const { loadError } = useLibraryStatus()
   if (!loadError) return null
   return (
-    <div role="alert" className="border-b border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-4 py-2.5 lg:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-foreground">
-          <strong className="font-medium">Your library couldn't be loaded.</strong> {loadError} Editing is paused until it loads.
-        </p>
-        <button
-          type="button"
-          onClick={retryLibraryLoad}
-          className="press shrink-0 border border-[var(--foreground)] px-3 py-1 font-sans text-[11px] font-medium uppercase tracking-[0.12em] hover:bg-[var(--foreground)] hover:text-[var(--background)]"
-        >
-          Retry now
-        </button>
-      </div>
-    </div>
+    <ErrorNotice
+      bleed
+      title="Your library couldn’t be loaded"
+      message={`${loadError} Editing is paused until it loads.`}
+      onRetry={retryLibraryLoad}
+      retryLabel="Retry now"
+    />
   )
 }

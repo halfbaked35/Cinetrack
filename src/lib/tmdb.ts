@@ -203,6 +203,21 @@ function sanitizeLanguage(lang: unknown): string {
   return typeof lang === 'string' && LANGUAGES.some((l) => l.id === lang) ? lang : 'en-US'
 }
 
+/** A TMDb (or proxy) response with a non-2xx status. */
+export class TmdbError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'TmdbError'
+    this.status = status
+  }
+}
+
+/** True when TMDb has no record at all (a deleted title, a bad id): not worth retrying. */
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof TmdbError && error.status === 404
+}
+
 export async function tmdb<T>(  path: string,
   params: Record<string, string | number> = {},
   opts: { signal?: AbortSignal; timeoutMs?: number } = {},
@@ -283,7 +298,7 @@ export async function tmdb<T>(  path: string,
           const rawMsg = (body as { status_message?: unknown; error?: unknown })?.status_message ?? (body as { error?: unknown })?.error
           const msg = sanitizeUpstreamText(rawMsg, 300)
           const retry = res.headers.get('retry-after')
-          throw new Error(msg ?? `TMDb request failed (${res.status})${retry ? ` — retry after ${retry}s` : ''}`)
+          throw new TmdbError(msg ?? `TMDb request failed (${res.status})${retry ? ` — retry after ${retry}s` : ''}`, res.status)
         }
 
         const ct = res.headers.get('content-type') || ''

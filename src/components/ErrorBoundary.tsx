@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { ErrorState } from './Errors'
 
 /** A lazily loaded chunk failed to download (offline, or the app was rebuilt). */
 export function isChunkLoadError(error: unknown): boolean {
@@ -10,8 +11,10 @@ type Props = {
   children: ReactNode
   /** Changing this value clears a caught error (e.g. on navigation). */
   resetKey?: unknown
-  /** Compact inline fallback instead of the full-page one. */
-  inline?: boolean
+  /** Show the fallback as a dialog over the page (for drawers and overlays). */
+  overlay?: boolean
+  /** Close the failed overlay; offered as a second action. */
+  onDismiss?: () => void
   label?: string
 }
 type State = { error: Error | null; errorId: string | null; resetKey: unknown }
@@ -47,56 +50,36 @@ export class ErrorBoundary extends Component<Props, State> {
     const { error, errorId } = this.state
     if (!error) return this.props.children
     const chunk = isChunkLoadError(error)
-    const title = chunk ? 'This part of CineTrack could not load' : 'Something went wrong'
-    const detail = chunk
-      ? 'Check that the CineTrack server is still running, then try again.'
-      : import.meta.env.DEV
-        ? error.message
-        : 'An unexpected error interrupted this view. Your library is safe.'
-
-    if (this.props.inline) {
-      return (
-        <div role="alert" className="border border-dashed border-border px-6 py-10 text-center">
-          <p className="font-sans text-[12px] font-medium uppercase tracking-[0.14em] text-foreground">{title}</p>
-          <p className="mt-2 text-[13px] text-muted-foreground">{detail}</p>
-          <button
-            type="button"
-            onClick={this.retry}
-            className="press mt-4 border border-border px-4 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)]"
-          >
-            {chunk ? 'Reload' : 'Try again'}
-          </button>
-        </div>
-      )
-    }
-
+    const fallback = (
+      <ErrorState
+        size={this.props.overlay ? 'panel' : 'page'}
+        title={chunk ? 'This part of CineTrack could not load' : 'Something went wrong'}
+        message={
+          chunk
+            ? 'Check that the CineTrack server is still running, then reload.'
+            : import.meta.env.DEV
+              ? error.message
+              : 'An unexpected error interrupted this view. Your library is safe.'
+        }
+        details={
+          import.meta.env.DEV && !chunk && error.stack ? (
+            <pre className="quiet-scroll mt-4 max-h-40 overflow-auto border border-border bg-muted p-3 text-[11px] text-muted-foreground">{error.stack}</pre>
+          ) : undefined
+        }
+        actions={[
+          { label: chunk ? 'Reload' : 'Try again', onClick: this.retry },
+          this.props.overlay && this.props.onDismiss
+            ? { label: 'Close', onClick: this.props.onDismiss }
+            : { label: 'Reload page', onClick: () => window.location.reload() },
+        ]}
+        reference={`Error ID ${errorId} · If this keeps happening, export a backup from Settings.`}
+      />
+    )
+    if (!this.props.overlay) return fallback
     return (
-      <div role="alert" className="flex min-h-[60vh] flex-col items-center justify-center p-6 text-foreground">
-        <div className="max-w-lg border border-border bg-card p-6 shadow-lg">
-          <h1 className="font-display text-[26px] text-foreground">{title}</h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{detail}</p>
-          {import.meta.env.DEV && !chunk && error.stack && (
-            <pre className="mt-4 max-h-40 overflow-auto bg-muted p-3 text-[11px] text-muted-foreground">{error.stack}</pre>
-          )}
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={this.retry}
-              className="press border border-[var(--primary)] bg-[var(--primary)] px-4 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-primary-foreground"
-            >
-              Try again
-            </button>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="press border border-border bg-background px-4 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:bg-muted"
-            >
-              Reload page
-            </button>
-          </div>
-          <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
-            Error ID <span className="tabular-nums">{errorId}</span>. If this keeps happening, export a backup from Settings.
-          </p>
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[var(--scrim)] p-4">
+        <div role="dialog" aria-modal="true" aria-label="Error" className="w-full max-w-lg border border-border bg-background shadow-[var(--shadow-sheet)]">
+          {fallback}
         </div>
       </div>
     )

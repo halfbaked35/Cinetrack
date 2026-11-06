@@ -14,6 +14,7 @@ import {
 } from './lib/route'
 import { Logo, SETTINGS_PANEL_ID, Spinner } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { NotFound } from './components/Errors'
 import { LoadErrorBanner, SaveStatus } from './components/AppStatus'
 import InfoPage from './components/InfoPages'
 import type { LibraryView } from './components/Library'
@@ -122,7 +123,7 @@ export default function App() {
 
   // Page changes: new document title, back to the top, and focus on the new
   // view's heading so keyboard and screen-reader users land in the content.
-  const viewKey = route.info ?? route.page
+  const viewKey = route.info ?? (route.notFound ? 'not-found' : route.page)
   const lastView = useRef(viewKey)
   useEffect(() => {
     if (!route.title) document.title = documentTitleFor(route)
@@ -154,7 +155,7 @@ export default function App() {
     navigate({ ...HOME, page })
   }, [navigate])
 
-  const openInfo = useCallback((slug: InfoSlug) => navigate({ ...routeRef.current, info: slug, title: null, settings: false }), [navigate])
+  const openInfo = useCallback((slug: InfoSlug) => navigate({ ...routeRef.current, info: slug, title: null, settings: false, notFound: null }), [navigate])
   const closeInfo = useCallback(() => dismiss({ ...routeRef.current, info: null }), [dismiss])
 
   const openTitle = useCallback((type: MediaType, id: number, seed?: TmdbTitle) => {
@@ -201,7 +202,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [goPage, setSettingsOpen])
 
-  const activePage = route.info ? null : route.page
+  const activePage = route.info || route.notFound ? null : route.page
   const titleSeed = route.title ? seeds.current.get(`${route.title.type}:${route.title.id}`) : undefined
 
   return (
@@ -306,6 +307,19 @@ export default function App() {
             <div className="page-enter" key={viewKey}>
               {route.info ? (
                 <InfoPage slug={route.info} onBack={closeInfo} />
+              ) : route.notFound ? (
+                <NotFound
+                  title="This page isn’t in CineTrack"
+                  message={
+                    <>
+                      Nothing lives at <code className="break-all font-sans text-foreground">#{route.notFound}</code>. The link may be mistyped or from an older version.
+                    </>
+                  }
+                  actions={[
+                    { label: 'Go home', onClick: () => goPage('home') },
+                    { label: 'Open library', onClick: () => goPage('library') },
+                  ]}
+                />
               ) : (
                 <>
                   {route.page === 'home' && <Home onOpen={openTitle} onLibraryNavigate={(view) => goPage('library', view)} />}
@@ -341,7 +355,12 @@ export default function App() {
         </div>
       </footer>
 
-      <ErrorBoundary inline label="overlay" resetKey={`${route.title?.type}:${route.title?.id}:${route.settings}`}>
+      <ErrorBoundary
+        overlay
+        label="overlay"
+        resetKey={`${route.title?.type}:${route.title?.id}:${route.settings}`}
+        onDismiss={() => dismiss({ ...routeRef.current, title: null, settings: false })}
+      >
         <Suspense fallback={null}>
           {(settingsMounted || route.settings) && <SettingsPanel open={route.settings} onClose={() => setSettingsOpen(false)} />}
           {route.title && (

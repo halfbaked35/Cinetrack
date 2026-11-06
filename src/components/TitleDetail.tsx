@@ -11,6 +11,7 @@ import {
   type SeasonSummary,
   type TitleDetail as Detail,
   type TmdbTitle,
+  isNotFoundError,
 } from '../lib/tmdb'
 import {
   canLogRewatch,
@@ -31,9 +32,10 @@ import {
 import { canSetDropped, statusOptionsFor, statusTransition } from '../lib/status'
 import { MAX_CUSTOM_POSTER_FILE_BYTES, prepareCustomPoster } from '../lib/custom-poster'
 import { useSettings } from '../lib/settings'
-import { CarouselNav, CloseButton, ConfirmDialog, PosterTilt, Spinner, STATUS_BADGE, STATUS_INACTIVE, STATUS_STYLE, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap, usePosterArt, useTimedTooltip } from './ui'
+import { CarouselNav, CloseButton, ConfirmDialog, Empty, PosterTilt, Spinner, STATUS_BADGE, STATUS_INACTIVE, STATUS_STYLE, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap, usePosterArt, useTimedTooltip } from './ui'
 import { useToast } from './Toast'
 import CastDetail from './CastDetail'
+import { ErrorNotice, ErrorState, NotFound } from './Errors'
 
 const MAX_AUTO_EPISODES = 20000
 const DRAWER_TRANSITION_MS = 320
@@ -73,6 +75,8 @@ export default function TitleDetail({
 }) {
   const [data, setData] = useState<Detail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** TMDb has no record of this title (deleted, or a bad id in a link). */
+  const [notFound, setNotFound] = useState(false)
   const [editing, setEditing] = useState(false)
   const [rewatchOpen, setRewatchOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<Status | null>(null)
@@ -156,9 +160,14 @@ export default function TitleDetail({
     let live = true
     setData(null)
     setError(null)
+    setNotFound(false)
     details(type, id, { signal: controller.signal })
       .then((d) => live && setData(d))
-      .catch((e) => live && setError(e.message))
+      .catch((e) => {
+        if (!live) return
+        setError(e.message)
+        setNotFound(isNotFoundError(e))
+      })
     return () => {
       live = false
       controller.abort()
@@ -204,14 +213,15 @@ export default function TitleDetail({
 
   // The tab names the open title; the page view restores its own on close.
   const displayTitle = entry?.title || (source ? titleOf(source) : null)
+  const tabTitle = displayTitle ?? (notFound ? 'Title not found' : error ? 'Title unavailable' : null)
   useEffect(() => {
-    if (!displayTitle) return
+    if (!tabTitle) return
     const previous = document.title
-    document.title = `${displayTitle} · CineTrack`
+    document.title = `${tabTitle} · CineTrack`
     return () => {
       document.title = previous
     }
-  }, [displayTitle])
+  }, [tabTitle])
   const contentLang = metadataLanguage.split('-')[0] !== 'en' ? metadataLanguage : undefined
   const cast = data?.credits?.cast ?? []
   // Stable identity so the season list doesn't re-run its effects every render.
@@ -299,20 +309,24 @@ export default function TitleDetail({
 
         <div className="quiet-scroll min-h-0 flex-1 overflow-y-auto">
 
-        {error && !source && (
-          <div className="flex min-h-[50vh] flex-col items-center justify-center p-12 text-center animate-fade">
-            <span className="mb-2 font-sans text-[11px] uppercase tracking-[0.16em] text-[var(--primary)]">
-              Failed to load catalogue entry
-            </span>
-            <p className="max-w-md text-[13px] text-muted-foreground">{error}</p>
-            <button
-              onClick={() => setDetailAttempt((a) => a + 1)}
-              className="press mt-5 border border-border px-5 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)]"
-            >
-              Retry
-            </button>
-          </div>
-        )}
+        {error && !source && (notFound ? (
+          <NotFound
+            size="panel"
+            title="This title isn’t on TMDb"
+            message="It may have been removed, or the link has the wrong ID."
+            actions={[{ label: 'Close', onClick: onClose }]}
+          />
+        ) : (
+          <ErrorState
+            size="panel"
+            title="This title couldn’t load"
+            message={error}
+            actions={[
+              { label: 'Retry', onClick: () => setDetailAttempt((a) => a + 1) },
+              { label: 'Close', onClick: onClose },
+            ]}
+          />
+        ))}
 
         {!source && !data && !error && (
           <div className="flex min-h-[65vh] flex-col items-center justify-center gap-3 animate-fade">
@@ -323,16 +337,12 @@ export default function TitleDetail({
         {source && (
           <div className="animate-fade">
             {error && (
-              <div role="alert" className="mx-6 mt-4 flex flex-wrap items-center justify-between gap-3 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-3 py-2">
-                <span className="font-sans text-[11px] text-[var(--primary)]">Latest catalogue details unavailable · {error}</span>
-                <button
-                  type="button"
-                  onClick={() => setDetailAttempt((a) => a + 1)}
-                  className="press border border-[var(--primary)] px-3 py-1 font-sans text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-primary-foreground"
-                >
-                  Retry
-                </button>
-              </div>
+              <ErrorNotice
+                className="mx-4 mt-4 sm:mx-6"
+                title={notFound ? 'TMDb no longer lists this title' : 'Showing saved details'}
+                message={notFound ? 'Your library entry is kept as it is.' : `Latest catalogue details are unavailable — ${error}`}
+                onRetry={notFound ? undefined : () => setDetailAttempt((a) => a + 1)}
+              />
             )}
             <div className="grid gap-6 px-4 pb-5 pt-6 sm:grid-cols-[160px_1fr] sm:px-6 sm:pt-7 lg:grid-cols-[230px_1fr] lg:grid-rows-[345px] lg:gap-8">
               <PosterTilt className="w-full max-w-[180px] select-none sm:max-w-none">
@@ -557,15 +567,7 @@ export default function TitleDetail({
               >
                 {!data ? (
                   error ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <p className="rule-label">Catalogue data failed to load · {error}</p>
-                      <button
-                        onClick={() => setDetailAttempt((a) => a + 1)}
-                        className="press border border-border px-5 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)]"
-                      >
-                        Retry
-                      </button>
-                    </div>
+                    <Empty>Unavailable until catalogue details load</Empty>
                   ) : (
                     <div className="flex items-center justify-center py-12">
                       <Spinner size={28} />
@@ -599,15 +601,7 @@ export default function TitleDetail({
               >
                 {!data ? (
                   error ? (
-                    <div className="flex flex-col items-center gap-3 py-12 text-center">
-                      <p className="rule-label">Catalogue data failed to load · {error}</p>
-                      <button
-                        onClick={() => setDetailAttempt((a) => a + 1)}
-                        className="press border border-border px-5 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)]"
-                      >
-                        Retry
-                      </button>
-                    </div>
+                    <Empty>Unavailable until catalogue details load</Empty>
                   ) : (
                     <div className="flex items-center justify-center py-12">
                       <Spinner size={28} />
@@ -2287,15 +2281,12 @@ function Seasons({
               <div>
                 {loading && !eps && !seasonError && <p className="rule-label px-4 py-4">Loading episodes…</p>}
                 {seasonError && !eps && (
-                  <div className="flex flex-wrap items-center gap-3 px-4 py-4">
-                    <p className="rule-label">Episodes failed to load · {seasonError}</p>
-                    <button
-                      onClick={() => setSeasonAttempt((a) => a + 1)}
-                      className="press border border-border px-3 py-1 font-sans text-[10px] font-medium uppercase tracking-[0.12em] hover:border-[var(--foreground)]"
-                    >
-                      Retry
-                    </button>
-                  </div>
+                  <ErrorNotice
+                    className="m-4"
+                    title="Episodes couldn’t load"
+                    message={seasonError}
+                    onRetry={() => setSeasonAttempt((a) => a + 1)}
+                  />
                 )}
                 {eps?.map((e) => {
                   const loggedAt = watched[epKey(s.season_number, e.episode_number)]
