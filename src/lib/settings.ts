@@ -82,6 +82,13 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
   if ((STARTING_STATUS_IDS as readonly string[]).includes(s.defaultStatus as string)) {
     out.defaultStatus = s.defaultStatus as StartingStatus
   }
+  if (typeof s.metadataLanguage === 'string' && LANGUAGES.some((l) => l.id === s.metadataLanguage)) {
+    out.metadataLanguage = s.metadataLanguage
+  }
+  out.libraryColumns = clamp(s.libraryColumns, 3, 10, DEFAULTS.libraryColumns)
+  out.discoverColumns = clamp(s.discoverColumns, 3, 10, DEFAULTS.discoverColumns)
+  out.includeAdult = !!s.includeAdult
+  out.roundPosters = !!s.roundPosters
   return out
 }
 
