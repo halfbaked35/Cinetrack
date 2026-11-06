@@ -1,12 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { activityByMonth, type Entry } from '../lib/library'
+import { monotoneSegments, type Point } from '../lib/curve'
 import { Empty, SectionHead } from './ui'
 
 const HEIGHT = 220
 const PAD = { top: 30, right: 16, bottom: 12, left: 24 }
 
 type Month = { key: string; label: string; year: number; count: number; current: boolean }
-type Point = { x: number; y: number }
 
 function monthsFrom(entries: Entry[]): Month[] {
   const now = new Date()
@@ -24,36 +24,6 @@ function monthsFrom(entries: Entry[]): Month[] {
 function niceMax(max: number): number {
   const step = max <= 4 ? 2 : max <= 10 ? 2 : max <= 20 ? 4 : max <= 50 ? 10 : 20
   return Math.max(step, Math.ceil(max / step) * step)
-}
-
-/**
- * Monotone cubic (Fritsch–Carlson) segments: smooth, but never overshooting
- * a data point, so the curve can't suggest a month higher or lower than it was.
- */
-function monotoneSegments(points: Point[]): string[] {
-  const n = points.length
-  if (n < 2) return []
-  const dx: number[] = []
-  const slope: number[] = []
-  for (let i = 0; i < n - 1; i++) {
-    dx[i] = points[i + 1]!.x - points[i]!.x
-    slope[i] = (points[i + 1]!.y - points[i]!.y) / dx[i]!
-  }
-  const tangent: number[] = [slope[0]!]
-  for (let i = 1; i < n - 1; i++) {
-    const a = slope[i - 1]!
-    const b = slope[i]!
-    tangent[i] = a * b <= 0 ? 0 : (3 * (dx[i - 1]! + dx[i]!)) / ((2 * dx[i]! + dx[i - 1]!) / a + (dx[i]! + 2 * dx[i - 1]!) / b)
-  }
-  tangent[n - 1] = slope[n - 2]!
-  const segments: string[] = []
-  for (let i = 0; i < n - 1; i++) {
-    const p = points[i]!
-    const q = points[i + 1]!
-    const h = dx[i]! / 3
-    segments.push(`C${p.x + h},${p.y + tangent[i]! * h} ${q.x - h},${q.y - tangent[i + 1]! * h} ${q.x},${q.y}`)
-  }
-  return segments
 }
 
 function Figure({ label, value, unit }: { label: string; value: string | number; unit?: string }) {

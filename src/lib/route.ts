@@ -2,6 +2,7 @@
  * URL ⇄ view state. The hash carries everything needed for a deep link:
  *
  *   #                 Home              #discover / #library   pages
+ *   #welcome          the landing page (the nav logo opens it)
  *   #about …          info pages        #title/movie/550       a title drawer
  *   anything else     the Not Found page (the hash is kept as typed)
  *
@@ -10,7 +11,7 @@
  */
 import type { MediaType } from './entry'
 
-export type Page = 'home' | 'discover' | 'library'
+export type Page = 'home' | 'discover' | 'library' | 'welcome'
 export type InfoSlug = 'about' | 'privacy' | 'terms' | 'api'
 export type Route = {
   page: Page
@@ -22,7 +23,7 @@ export type Route = {
 }
 
 export const INFO_SLUGS: readonly InfoSlug[] = ['about', 'privacy', 'terms', 'api']
-const PAGES: readonly Page[] = ['home', 'discover', 'library']
+const PAGES: readonly Page[] = ['home', 'discover', 'library', 'welcome']
 
 export const HOME: Route = { page: 'home', info: null, title: null, settings: false, notFound: null }
 
@@ -65,11 +66,12 @@ export const sameRoute = (a: Route, b: Route) =>
   a.page === b.page && a.info === b.info && a.settings === b.settings && a.notFound === b.notFound &&
   a.title?.type === b.title?.type && a.title?.id === b.title?.id
 
-const PAGE_LABEL: Record<Page, string> = { home: 'Home', discover: 'Discover', library: 'Library' }
+const PAGE_LABEL: Record<Page, string> = { home: 'Home', discover: 'Discover', library: 'Library', welcome: 'Welcome' }
 const INFO_LABEL: Record<InfoSlug, string> = { about: 'About', privacy: 'Privacy', terms: 'Terms', api: 'API' }
 
 export function documentTitleFor(route: Route): string {
   if (route.info) return `${INFO_LABEL[route.info]} · CineTrack`
   if (route.notFound) return 'Not found · CineTrack'
+  if (route.page === 'welcome') return 'CineTrack · A ledger for films and television'
   return route.page === 'home' ? 'CineTrack' : `${PAGE_LABEL[route.page]} · CineTrack`
 }

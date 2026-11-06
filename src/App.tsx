@@ -22,6 +22,7 @@ import type { LibraryView } from './components/Library'
 const Home = lazy(() => import('./components/Home'))
 const Discover = lazy(() => import('./components/Discover'))
 const Library = lazy(() => import('./components/Library'))
+const Landing = lazy(() => import('./components/Landing'))
 /** One shared import, so the idle prefetch and React.lazy resolve the same module. */
 let titleDetailModule: Promise<typeof import('./components/TitleDetail')> | null = null
 const loadTitleDetail = () => (titleDetailModule ??= import('./components/TitleDetail'))
@@ -227,9 +228,9 @@ export default function App() {
             href="#"
             onClick={(e) => {
               e.preventDefault()
-              goPage('home')
+              goPage('welcome')
             }}
-            aria-label="CineTrack home"
+            aria-label="About CineTrack"
             className="press flex items-center justify-self-start py-3"
           >
             <Logo size={24} markSize={44} wordmark={false} />
@@ -325,6 +326,7 @@ export default function App() {
                   {route.page === 'home' && <Home onOpen={openTitle} onLibraryNavigate={(view) => goPage('library', view)} />}
                   {route.page === 'discover' && <Discover onOpen={openTitle} />}
                   {route.page === 'library' && <Library onOpen={openTitle} initialView={libraryView} />}
+                  {route.page === 'welcome' && <Landing onOpen={openTitle} onNavigate={(page) => goPage(page)} />}
                 </>
               )}
             </div>

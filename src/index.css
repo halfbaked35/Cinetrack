@@ -353,6 +353,55 @@ html {
   transform-origin: left;
   animation: ct-rule 620ms var(--ease-sheet) both;
 }
+/* ------------------------------------------------------------------
+   Landing page: an opening-titles sequence. The posters drift behind the
+   main title like the opening shot, and each credit settles into focus as
+   it scrolls into frame. Content is visible by default; motion is added
+   only where the browser supports scroll timelines and motion is welcome.
+   ------------------------------------------------------------------ */
+.credit-footage {
+  mask-image: linear-gradient(to right, transparent, #000 9%, #000 91%, transparent);
+}
+@keyframes ct-marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@keyframes ct-credit {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .credit-marquee {
+    animation: ct-marquee 90s linear infinite;
+  }
+  .credit-footage:hover .credit-marquee {
+    animation-play-state: paused;
+  }
+  @supports (animation-timeline: view()) {
+    .credit-reveal {
+      animation: ct-credit linear both;
+      animation-timeline: view();
+      /* Settled by the time the piece is fully in frame. */
+      animation-range: entry 0% entry 100%;
+    }
+    .chart-scroll-draw {
+      stroke-dasharray: 1;
+      animation: ct-draw linear both;
+      animation-timeline: view();
+      animation-range: entry 20% entry 100%;
+    }
+  }
+}
+
 /* Chart line draws itself left to right (paths use pathLength=1). */
 @keyframes ct-draw {
   from {
