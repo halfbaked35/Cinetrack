@@ -1,215 +1,7 @@
 @import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #14130f;
-  --card: #faf8f3;
-  --card-foreground: #14130f;
-  --primary: #7a2318;
-  --primary-foreground: #fdfbf6;
-  --secondary: #f0ede4;
-  --secondary-foreground: #3a3730;
-  --muted: #f5f3ed;
-  --muted-foreground: #74705f;
-  --accent: #7a2318;
-  --accent-foreground: #fdfbf6;
-  --destructive: #dc2626;
-  --destructive-foreground: #fdfbf6;
-  --toast-info: #1d4ed8;
-  --toast-success: #15803d;
-  --toast-warning: #a16207;
-  --toast-error: #b91c1c;
-  --toast-on: #ffffff;
-  --status-planned: #52525b;
-  --status-planned-foreground: #ffffff;
-  --status-watching: #2563eb;
-  --status-watching-foreground: #ffffff;
-  --status-watched: #15803d;
-  --status-watched-foreground: #ffffff;
-  --border: #e3ded1;
-  --ring: #7a2318;
-  --radius: 2px;
-  /* Status colours used as text on tinted chips (≥4.5:1 on the background). */
-  --status-planned-ink: #52525b;
-  --status-watching-ink: #1d4ed8;
-  --status-watched-ink: #166534;
-  --tooth: rgba(20, 19, 15, 0.045);
-}
-
-[data-theme='halide'],
-[data-theme='velvet'],
-[data-theme='black'] {
-  color-scheme: dark;
-  --status-planned-ink: #a1a1aa;
-  --status-watching-ink: #60a5fa;
-  --status-watched-ink: #4ade80;
-}
-
-/* Derived tokens, computed per theme from its own colours. */
-:root {
-  /* Form-control borders need 3:1 against the page (WCAG 1.4.11). */
-  --input: color-mix(in srgb, var(--foreground) 48%, var(--background));
-}
-
-[data-theme='custom'] {
-  --status-planned-ink: var(--status-planned);
-  --status-watching-ink: var(--status-watching);
-  --status-watched-ink: var(--status-watched);
-}
-
-/* Darkroom under safelight — charcoal stock, carbon card, silver-blue ink. */
-[data-theme='halide'] {
-  --background: #242424;
-  --foreground: #ededed;
-  --card: #141414;
-  --card-foreground: #ededed;
-  --primary: #6fa8c4;
-  --primary-foreground: #0e1214;
-  --secondary: #2e2e2e;
-  --secondary-foreground: #d4d4d4;
-  --muted: #1c1c1c;
-  --muted-foreground: #9a9a9a;
-  --accent: #6fa8c4;
-  --accent-foreground: #0e1214;
-  --destructive: #ef4444;
-  --destructive-foreground: #0e1214;
-  --toast-info: #7dd3fc;
-  --toast-success: #86efac;
-  --toast-warning: #fcd34d;
-  --toast-error: #fca5a5;
-  --toast-on: #0a0a0a;
-  --status-planned: #52525b;
-  --status-planned-foreground: #ffffff;
-  --status-watching: #2563eb;
-  --status-watching-foreground: #ffffff;
-  --status-watched: #15803d;
-  --status-watched-foreground: #ffffff;
-  --border: #333333;
-  --ring: #6fa8c4;
-  --tooth: rgba(237, 237, 237, 0.03);
-}
-
-/* Velvet house — near-black auditorium, curtain-red ink, warm house-light. */
-[data-theme='velvet'] {
-  --background: #100e0d;
-  --foreground: #f2ede1;
-  --card: #1c1412;
-  --card-foreground: #f2ede1;
-  --primary: #d0583f;
-  --primary-foreground: #100e0d;
-  --secondary: #271d1a;
-  --secondary-foreground: #ded7c8;
-  --muted: #201917;
-  --muted-foreground: #a49b88;
-  --accent: #d4695a;
-  --accent-foreground: #120f0a;
-  --destructive: #ef4444;
-  --destructive-foreground: #100e0d;
-  --toast-info: #93c5fd;
-  --toast-success: #86efac;
-  --toast-warning: #fbbf24;
-  --toast-error: #fca5a5;
-  --toast-on: #0a0a0a;
-  --status-planned: #52525b;
-  --status-planned-foreground: #ffffff;
-  --status-watching: #2563eb;
-  --status-watching-foreground: #ffffff;
-  --status-watched: #15803d;
-  --status-watched-foreground: #ffffff;
-  --border: #352825;
-  --ring: #d0583f;
-  --tooth: rgba(242, 237, 225, 0.035);
-}
-
-/* Black leader — true black stock, silver type, CineTrack pink. */
-[data-theme='black'] {
-  --background: #000000;
-  --foreground: #f5f5f5;
-  --card: #0a0a0a;
-  --card-foreground: #f5f5f5;
-  --primary: #d93d87;
-  --primary-foreground: #000000;
-  --secondary: #171717;
-  --secondary-foreground: #dedede;
-  --muted: #101010;
-  --muted-foreground: #a3a3a3;
-  --accent: #e65098;
-  --accent-foreground: #000000;
-  --destructive: #f87171;
-  --destructive-foreground: #000000;
-  --toast-info: #60a5fa;
-  --toast-success: #4ade80;
-  --toast-warning: #facc15;
-  --toast-error: #f87171;
-  --toast-on: #0a0a0a;
-  --status-planned: #a1a1aa;
-  --status-planned-foreground: #000000;
-  --status-watching: #60a5fa;
-  --status-watching-foreground: #000000;
-  --status-watched: #4ade80;
-  --status-watched-foreground: #000000;
-  --border: #292929;
-  --ring: #e65098;
-  --tooth: rgba(245, 245, 245, 0.025);
-}
-
-/* Technical drawing — cool slate ground, ink blue rules. */
-[data-theme='blueprint'] {
-  --background: #eef1f4;
-  --foreground: #131a21;
-  --card: #e2e8ee;
-  --card-foreground: #131a21;
-  --primary: #1f5673;
-  --primary-foreground: #f2f6f9;
-  --secondary: #d7dfe7;
-  --secondary-foreground: #2c3945;
-  --muted: #e4e9ef;
-  --muted-foreground: #53606d;
-  --accent: #2b7a9b;
-  --accent-foreground: #f2f6f9;
-  --destructive: #dc2626;
-  --destructive-foreground: #fdfbf6;
-  --status-planned: #52525b;
-  --status-planned-foreground: #ffffff;
-  --status-watching: #2563eb;
-  --status-watching-foreground: #ffffff;
-  --status-watched: #15803d;
-  --status-watched-foreground: #ffffff;
-  --border: #cbd5df;
-  --ring: #1f5673;
-  --tooth: rgba(19, 26, 33, 0.05);
-}
-
-/* Bespoke palette — values overwritten by inline properties via settings */
-[data-theme='custom'] {
-  --background: #ffffff;
-  --foreground: #14130f;
-  --card: #faf8f3;
-  --card-foreground: #14130f;
-  --primary: #7a2318;
-  --primary-foreground: #fdfbf6;
-  --secondary: #f0ede4;
-  --secondary-foreground: #3a3730;
-  --muted: #f5f3ed;
-  --muted-foreground: #74705f;
-  --accent: #7a2318;
-  --accent-foreground: #fdfbf6;
-  --destructive: #dc2626;
-  --destructive-foreground: #fdfbf6;
-  --toast-info: #1d4ed8;
-  --toast-success: #15803d;
-  --toast-warning: #a16207;
-  --toast-error: #b91c1c;
-  --status-planned: #52525b;
-  --status-planned-foreground: #ffffff;
-  --status-watching: #2563eb;
-  --status-watching-foreground: #ffffff;
-  --status-watched: #15803d;
-  --status-watched-foreground: #ffffff;
-  --border: #e3ded1;
-  --ring: #7a2318;
-  --tooth: rgba(20, 19, 15, 0.045);
-}
+/* Theme tokens: four themes, one token contract. */
+@import './styles/themes.css';
 
 @theme inline {
   --color-background: var(--background);
@@ -233,6 +25,7 @@
   --color-status-watched: var(--status-watched);
   --color-status-watched-foreground: var(--status-watched-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-ring: var(--ring);
   --radius-sm: var(--radius);
   --font-display: 'Instrument Serif', Georgia, serif;
@@ -240,7 +33,6 @@
 }
 
 html {
-  color-scheme: light;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
@@ -257,9 +49,7 @@ html {
 body {
   margin: 0;
   overflow-anchor: none;
-  /* Faint paper tooth so the true-white ground reads as stock, not screen. */
-  background-image: radial-gradient(circle at 1px 1px, var(--tooth) 1px, transparent 0);
-  background-size: 4px 4px;
+  background: var(--background);
 }
 
 body {
@@ -267,13 +57,19 @@ body {
 }
 
 ::selection {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--selection);
+  color: var(--foreground);
 }
 
 :focus-visible {
-  outline: 2px solid var(--foreground);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+
+/* View headings take focus only so screen readers announce the new page;
+   they aren't controls, so they don't need a ring. */
+#main-content h1[tabindex='-1']:focus {
+  outline: none;
 }
 
 html {
@@ -383,7 +179,7 @@ html {
 }
 
 .poster-card-3d__art {
-  border: 1px solid color-mix(in srgb, var(--foreground) 14%, transparent);
+  border: 1px solid var(--poster-edge);
 }
 
 /* Rounded posters preference */

@@ -389,7 +389,7 @@ function ActivityModal({
 
   return createPortal((
     <div
-      className={`modal-backdrop fixed inset-0 z-[80] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop fixed inset-0 z-[80] flex items-center justify-center bg-[var(--scrim)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={onClose}
     >
@@ -398,7 +398,7 @@ function ActivityModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="activity-modal-title"
-        className="modal-sheet flex h-[min(82vh,680px)] w-full max-w-[620px] flex-col border border-border bg-background shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet flex h-[min(82vh,680px)] w-full max-w-[620px] flex-col border border-border bg-background shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(event) => event.stopPropagation()}
       >

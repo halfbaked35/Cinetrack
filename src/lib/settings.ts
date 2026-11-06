@@ -1,17 +1,10 @@
 import { useCallback, useSyncExternalStore } from 'react'
 import { setPersistenceState, unrefTimer } from './persistence'
 import { STARTING_STATUS_IDS, type StartingStatus } from './status'
-import {
-  type ThemeId,
-  type CustomThemeColors,
-  DEFAULT_CUSTOM_COLORS,
-  isValidHex,
-  normalizeHex,
-  applyTheme as applyThemeEngine,
-} from './theme'
+import { type ThemePreference, DEFAULT_THEME, applyTheme as applyThemeEngine, resolveThemePreference, watchSystemTheme } from './theme'
 
-export type { ThemeId, CustomThemeColors, CuratedPalette } from './theme'
-export { DEFAULT_CUSTOM_COLORS, THEME_DEFAULTS, CURATED_PALETTES, isValidHex, normalizeHex, getContrastColor } from './theme'
+export type { ThemeId, ThemeMeta, ThemePreference } from './theme'
+export { THEMES } from './theme'
 
 export const DEFAULT_ARCHIVE_NAME = 'The Standing Collection'
 export const ARCHIVE_NAME_MAX_LENGTH = 48
@@ -33,27 +26,16 @@ export const LANGUAGES: { id: string; label: string }[] = [
 const TAB_IDS = ['all', 'movie', 'tv', 'favorites'] as const
 const SORT_IDS = ['added', 'lastWatched', 'title', 'rating', 'year', 'status'] as const
 
-export const THEMES: { id: ThemeId; name: string; note: string; tone: 'light' | 'dark'; swatch: [string, string, string] }[] = [
-  { id: 'paper', name: 'Paper', note: 'True white stock, oxblood ink', tone: 'light', swatch: ['#ffffff', '#14130f', '#7a2318'] },
-  { id: 'blueprint', name: 'Blueprint', note: 'Cool slate, technical ink', tone: 'light', swatch: ['#eef1f4', '#131a21', '#1f5673'] },
-  { id: 'halide', name: 'Halide', note: 'Charcoal stock, carbon card, silver-blue', tone: 'dark', swatch: ['#242424', '#ededed', '#6fa8c4'] },
-  { id: 'velvet', name: 'Velvet', note: 'Cinema velvet, curtain-red house', tone: 'dark', swatch: ['#100e0d', '#f2ede1', '#b3402e'] },
-  { id: 'black', name: 'Black', note: 'Pure black, silver type, cinema pink', tone: 'dark', swatch: ['#000000', '#f5f5f5', '#d93d87'] },
-  { id: 'custom', name: 'Custom', note: 'Bespoke palette with custom hex colors', tone: 'light', swatch: ['#ffffff', '#14130f', '#7a2318'] },
-]
-
 export type StatusBadgeShape = 'circle' | 'square' | 'text'
 export type StatusBadgeSize = 'small' | 'medium' | 'large'
 export type StatusBadgePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export type Settings = {
-  theme: ThemeId
-  customColors: CustomThemeColors
+  theme: ThemePreference
   density: 'comfortable' | 'compact'
   hideSpoilers: boolean
   blurEpisodeCovers: boolean
   hideEpisodeCovers: boolean
-  episodeWatchedColor: string
   showSpecials: boolean
   autoCompleteSeries: boolean
   posterMotion: boolean
@@ -82,13 +64,11 @@ export type Settings = {
 }
 
 const DEFAULTS: Settings = {
-  theme: 'paper',
-  customColors: { ...DEFAULT_CUSTOM_COLORS },
+  theme: DEFAULT_THEME,
   density: 'comfortable',
   hideSpoilers: false,
   blurEpisodeCovers: false,
   hideEpisodeCovers: false,
-  episodeWatchedColor: '#15803d',
   showSpecials: true,
   autoCompleteSeries: true,
   posterMotion: true,
@@ -126,40 +106,11 @@ function clamp(n: unknown, min: number, max: number, def: number): number {
 
 function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
   const out: Settings = { ...DEFAULTS }
-  // Retired id: Nitrate became Velvet (amber lamp → curtain red).
-  const theme = (s.theme as string) === 'nitrate' ? 'velvet' : s.theme
-  if (THEMES.some((t) => t.id === theme)) out.theme = theme as ThemeId
-  if (s.customColors && typeof s.customColors === 'object' && !Array.isArray(s.customColors)) {
-    const raw = s.customColors as Record<string, unknown>
-    const clean: CustomThemeColors = { ...DEFAULT_CUSTOM_COLORS }
-    const keys: (keyof CustomThemeColors)[] = [
-      'background',
-      'card',
-      'foreground',
-      'primary',
-      'border',
-      'mutedForeground',
-      'secondary',
-      'statusPlanned',
-      'statusWatching',
-      'statusWatched',
-    ]
-    for (const k of keys) {
-      const v = raw[k]
-      if (typeof v === 'string' && isValidHex(v)) {
-        clean[k] = normalizeHex(v)
-      }
-    }
-    out.customColors = clean
-  } else {
-    out.customColors = { ...DEFAULT_CUSTOM_COLORS }
-  }
+  // Retired themes (and the old custom palette) map onto the four current ones.
+  out.theme = resolveThemePreference(s.theme, s.customColors)
   if (s.density === 'comfortable' || s.density === 'compact') out.density = s.density
   out.hideSpoilers = !!s.hideSpoilers
   out.hideEpisodeCovers = !!s.hideEpisodeCovers
-  if (typeof s.episodeWatchedColor === 'string' && isValidHex(s.episodeWatchedColor)) {
-    out.episodeWatchedColor = normalizeHex(s.episodeWatchedColor)
-  }
   out.showSpecials = s.showSpecials !== false
   out.blurEpisodeCovers = !!s.blurEpisodeCovers && !out.hideEpisodeCovers
   out.autoCompleteSeries = s.autoCompleteSeries !== false
@@ -229,7 +180,7 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
  */
 let extraKeys: Record<string, unknown> = {}
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-const RETIRED_KEYS = new Set(['chartStyle', 'archiveItalicWordIndex'])
+const RETIRED_KEYS = new Set(['chartStyle', 'archiveItalicWordIndex', 'customColors', 'episodeWatchedColor'])
 /** The settings endpoint accepts ~10 KB per key and ~256 KB per request, so
  *  unknown keys are bounded here too — an oversized stray value would
  *  otherwise produce a body the server resets, wedging the retry loop. */
@@ -309,22 +260,21 @@ function notify() {
   }
 }
 
-export function applyTheme(theme: ThemeId, customColors?: Partial<CustomThemeColors> | null) {
-  applyThemeEngine(
-    theme,
-    customColors !== undefined ? customColors : cache?.customColors,
-    (t) => THEMES.find((item) => item.id === t)?.swatch[0],
-    cache?.roundPosters ?? false,
-  )
+export function applyTheme(theme: ThemePreference) {
+  applyThemeEngine(theme, cache?.roundPosters ?? false)
 }
+// Follow the OS live while the preference is `system`.
+watchSystemTheme(() => {
+  if (cache?.theme === 'system') applyTheme('system')
+})
 export function applyRoundPosters(round: boolean) {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.roundPosters = round ? 'true' : 'false'
   // Refresh the pre-paint hint so the next load rounds posters immediately.
-  if (cache) applyTheme(cache.theme, cache.customColors)
+  if (cache) applyTheme(cache.theme)
 }
 try {
-  applyTheme(cache.theme, cache.customColors)
+  applyTheme(cache.theme)
   applyRoundPosters(cache.roundPosters)
 } catch {}
 
@@ -508,7 +458,7 @@ async function hydrateFromSqlite() {
   }
   cache = sanitize(merged)
   try {
-    applyTheme(cache.theme, cache.customColors)
+    applyTheme(cache.theme)
     applyRoundPosters(cache.roundPosters)
   } catch {}
   const current = withExtras(cache)
@@ -569,7 +519,7 @@ export function importSettings(raw: unknown): boolean {
   stashExtras(incoming, { merge: true })
   cache = sanitize({ ...cache, ...(incoming as Partial<Settings>) })
   try {
-    applyTheme(cache.theme, cache.customColors)
+    applyTheme(cache.theme)
     applyRoundPosters(cache.roundPosters)
   } catch {}
   for (const key of Object.keys(cache) as (keyof Settings)[]) dirtyKeys.add(key)
@@ -600,10 +550,7 @@ export function useSettings() {
   const set = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
     let sanitized: Settings[K] = value
     // Validate per-key
-    if (key === 'theme' && !THEMES.some((t) => t.id === value)) sanitized = DEFAULTS.theme as Settings[K]
-    if (key === 'episodeWatchedColor' && typeof value === 'string') {
-      sanitized = (isValidHex(value) ? normalizeHex(value) : DEFAULTS.episodeWatchedColor) as Settings[K]
-    }
+    if (key === 'theme') sanitized = resolveThemePreference(value) as Settings[K]
     if ((key === 'libraryColumns' || key === 'discoverColumns' || key === 'shelfColumns') && typeof value === 'number') {
       sanitized = clamp(value as unknown as number, 3, 10, (DEFAULTS as Record<string, unknown>)[key] as number) as Settings[K]
     }
@@ -613,9 +560,9 @@ export function useSettings() {
     const next = sanitize({ ...cache, [key]: sanitized })
     cache = next
     dirtyKeys.add(key)
-    if (key === 'theme' || key === 'customColors')
+    if (key === 'theme')
       try {
-        applyTheme(cache.theme, cache.customColors)
+        applyTheme(cache.theme)
       } catch {}
     if (key === 'roundPosters')
       try {

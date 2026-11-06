@@ -205,7 +205,7 @@ export default function App() {
   const titleSeed = route.title ? seeds.current.get(`${route.title.type}:${route.title.id}`) : undefined
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col text-foreground">
       <NavigationProgress active={navigating} />
       <a
         href="#main-content"
@@ -217,7 +217,7 @@ export default function App() {
       >
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b border-border bg-background">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-xl backdrop-saturate-150">
         {/* Three tracks so the nav sits optically centred regardless of side widths.
             Stretch, not centre: the nav buttons run the full header height so the
             active rule rests on the bottom border. */}

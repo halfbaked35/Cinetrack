@@ -7,7 +7,7 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: { va
   if (!active || !payload?.length) return null
   const count = payload[0]?.value ?? 0
   return (
-    <div className="border border-border bg-background px-3.5 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.22)]">
+    <div className="border border-border bg-background px-3.5 py-2.5 shadow-[var(--shadow-pop)]">
       <div className="font-display text-[26px] leading-none tabular-nums">{count}</div>
       <div className="rule-label mt-1.5">
         {label} · {count === 1 ? 'title' : 'titles'}

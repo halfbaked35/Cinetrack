@@ -389,7 +389,7 @@ function FilterBar({
           triggerRef.current?.focus()
         }
       }}
-      className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute z-30 max-h-[min(70vh,520px)] w-[300px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[0_12px_40px_rgba(0,0,0,0.22)]"
+      className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute z-30 max-h-[min(70vh,520px)] w-[300px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[var(--shadow-pop)]"
     >
       <div className="rule-label mb-3 border-b border-border pb-2">
         {count} shown · sorted by {sortLabel}

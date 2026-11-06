@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { ARCHIVE_NAME_MAX_LENGTH, DEFAULT_ARCHIVE_NAME, importSettings, isValidHex, LANGUAGES, normalizeHex, settingsForBackup, THEMES, useSettings } from '../lib/settings'
+import { ARCHIVE_NAME_MAX_LENGTH, DEFAULT_ARCHIVE_NAME, importSettings, LANGUAGES, settingsForBackup, useSettings } from '../lib/settings'
 import type { StatusBadgePosition } from '../lib/settings'
 import { buildBackup, entryKey, loggedEpisodeCount, MAX_LIBRARY_FILE_BYTES, minutesWatched, parseLibraryImport, useLibrary, useLibraryStatus } from '../lib/library'
 import { Chip, CloseButton, ConfirmDialog, SETTINGS_PANEL_ID, StatusBadge, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap } from './ui'
 import { useToast } from './Toast'
-import ThemeCustomizer from './ThemeCustomizer'
+import ThemeToggle from './ThemeToggle'
 
 export default function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { settings, set } = useSettings()
@@ -15,7 +15,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
   const fileRef = useRef<HTMLInputElement>(null)
   const panelRef = useRef<HTMLElement | null>(null)
   const [shown, setShown] = useState(false)
-  const [customizerOpen, setCustomizerOpen] = useState(settings.theme === 'custom')
   useFocusTrap(panelRef, open)
 
   // Because this panel is lazy-mounted the first time it opens, its closed pose
@@ -132,7 +131,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
       <div
         aria-hidden
         onClick={onClose}
-        className={`fixed inset-0 z-50 bg-[rgba(20,19,15,0.42)] transition-opacity duration-[var(--dur-quick)] ${
+        className={`fixed inset-0 z-50 bg-[var(--scrim-soft)] transition-opacity duration-[var(--dur-quick)] ${
           shown ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         data-open={shown}
@@ -155,93 +154,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
 
         <div className="divide-y divide-border">
           <Group title="Appearance">
-            <div className="grid grid-cols-3 gap-2.5">
-              {THEMES.map((t) => {
-                const active = settings.theme === t.id
-                const [ground, ink, accent] =
-                  t.id === 'custom'
-                    ? [settings.customColors.background, settings.customColors.foreground, settings.customColors.primary]
-                    : t.swatch
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => {
-                      set('theme', t.id)
-                      if (t.id === 'custom') setCustomizerOpen(true)
-                    }}
-                    title={`${t.name} — ${t.note}`}
-                    aria-label={`${t.name} theme`}
-                    aria-pressed={active}
-                    className="press flex aspect-square w-full flex-col overflow-hidden border transition-all"
-                    style={{
-                      borderColor: active ? accent : 'var(--border)',
-                      boxShadow: active ? `0 0 0 1.5px ${accent}` : undefined,
-                    }}
-                  >
-                    <div className="flex flex-1 w-full overflow-hidden">
-                      <span className="h-full w-1/2" style={{ backgroundColor: ground }} />
-                      <span className="flex h-full w-1/2 flex-col">
-                        <span className="h-1/2 w-full" style={{ backgroundColor: ink }} />
-                        <span className="h-1/2 w-full" style={{ backgroundColor: accent }} />
-                      </span>
-                    </div>
-
-                    <div className="flex h-7 w-full shrink-0 items-center justify-between border-t border-border/60 bg-card px-2">
-                      <span
-                        className={`truncate font-sans text-[10px] font-medium uppercase tracking-[0.12em] ${
-                          active ? '' : 'text-muted-foreground'
-                        }`}
-                        style={active ? { color: accent } : undefined}
-                      >
-                        {t.name}
-                      </span>
-                      {active && (
-                        <span aria-hidden className="font-sans text-[10px]" style={{ color: accent }}>
-                          ✓
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setCustomizerOpen((v) => !v)}
-                aria-expanded={customizerOpen}
-                aria-controls="theme-customizer"
-                className="press flex w-full items-center justify-between border border-border bg-card px-3 py-2 text-left transition-colors hover:border-foreground"
-              >
-                <span className="font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-foreground">
-                  Customise colours
-                </span>
-                <span className="flex items-center gap-1.5 font-sans text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                  <span>{customizerOpen ? 'Hide' : 'Edit'}</span>
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    className={`transition-transform duration-200 ${customizerOpen ? 'rotate-180' : ''}`}
-                  >
-                    <polyline points="6 9 12 15 18 9" />
-                  </svg>
-                </span>
-              </button>
-            </div>
-
-            {customizerOpen && (
-              <div id="theme-customizer" className="mt-3 border-t border-border pt-3">
-                <ThemeCustomizer />
-              </div>
-            )}
+            <ThemeToggle value={settings.theme} onChange={(theme) => set('theme', theme)} />
           </Group>
 
           <Group title="Archive identity">
@@ -496,32 +409,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
           </Group>
 
           <Group title="Episode display">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <label htmlFor="episode-watched-color" className="block text-[13px]">Marked episode color</label>
-                <span className="mt-0.5 block text-[11px] text-muted-foreground">Fill color for marked episode checks.</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <label
-                  className="relative block h-9 w-9 shrink-0 cursor-pointer"
-                  style={{ backgroundColor: settings.episodeWatchedColor }}
-                  title="Pick marked episode color"
-                >
-                  <input
-                    id="episode-watched-color"
-                    type="color"
-                    value={settings.episodeWatchedColor}
-                    onChange={(e) => set('episodeWatchedColor', e.target.value)}
-                    aria-label="Marked episode color picker"
-                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                  />
-                </label>
-                <EpisodeColorHexInput
-                  value={settings.episodeWatchedColor}
-                  onChange={(value) => set('episodeWatchedColor', value)}
-                />
-              </div>
-            </div>
             <Toggle
               label="Hide episode descriptions"
               value={settings.hideSpoilers}
@@ -851,45 +738,6 @@ function OptionsRow<T extends string>({
         ))}
       </div>
     </div>
-  )
-}
-
-function EpisodeColorHexInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const [text, setText] = useState(value)
-  const [editing, setEditing] = useState(false)
-
-  // Follow outside changes, but never overwrite what is being typed.
-  useEffect(() => {
-    if (!editing) setText(value)
-  }, [value, editing])
-
-  return (
-    <input
-      type="text"
-      value={text}
-      onFocus={() => setEditing(true)}
-      onChange={(e) => {
-        const next = e.target.value
-        setText(next)
-        // Only a complete six-digit value applies live; "#abc" waits for blur.
-        if (/^#?[0-9a-f]{6}$/i.test(next.trim())) onChange(normalizeHex(next))
-      }}
-      onBlur={() => {
-        setEditing(false)
-        if (isValidHex(text)) {
-          const normalized = normalizeHex(text)
-          setText(normalized)
-          if (normalized !== value) onChange(normalized)
-        } else {
-          setText(value)
-        }
-      }}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-      maxLength={7}
-      spellCheck={false}
-      aria-label="Marked episode color hex code"
-      className="h-9 w-[94px] border border-border bg-card px-2 font-mono text-[11px] uppercase text-foreground outline-none focus:border-[var(--primary)] focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
-    />
   )
 }
 

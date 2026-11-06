@@ -11,7 +11,7 @@ CineTrack is a personal home for everything you watch. Track films and TV shows,
 - **Make it personal.** Add ratings, favourites, notes, watch dates, and even your own poster images.
 - **Discover new things.** Search TMDb, browse what's trending, and get "For You" picks based on your shelf.
 - **See your habits.** The home dashboard shows monthly charts, hours watched, and title counts.
-- **Make it yours.** Pick from light and dark themes, tweak colours, and adjust the layout.
+- **Make it yours.** Switch between light, dark, or follow your system setting, and adjust the layout.
 - **Stay portable.** Export a full backup (shelf and preferences) to a JSON file, or restore one, from Settings.
 
 ![Title details and episode tracking](screenshots/titlepreview.png)

@@ -104,7 +104,7 @@ export default function CastDetail({
 
   return createPortal((
     <div
-      className={`modal-backdrop fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop fixed inset-0 z-[70] flex items-center justify-center bg-[var(--scrim)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={close}
     >
@@ -113,7 +113,7 @@ export default function CastDetail({
         role="dialog"
         aria-modal="true"
         aria-label={data ? `Cast file — ${data.name}` : 'Cast file'}
-        className="modal-sheet flex h-[min(82vh,600px)] w-full max-w-[560px] flex-col border border-border bg-background shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet flex h-[min(82vh,600px)] w-full max-w-[560px] flex-col border border-border bg-background shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
       >

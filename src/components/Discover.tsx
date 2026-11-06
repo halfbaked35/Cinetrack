@@ -95,7 +95,7 @@ function BrowseOptionsDropdown({
           id="discover-browse-options"
           role="group"
           aria-label="Discover options"
-          className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,460px)] w-[320px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[0_16px_48px_rgba(0,0,0,0.35)] sm:w-[380px]"
+          className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,460px)] w-[320px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[var(--shadow-pop)] sm:w-[380px]"
         >
           <section aria-labelledby="discover-sort-label" className="mb-4">
             <div className="mb-2 border-b border-border pb-2">

@@ -1220,7 +1220,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className={`modal-backdrop ${container ? 'absolute' : 'fixed'} inset-0 z-[100] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop ${container ? 'absolute' : 'fixed'} inset-0 z-[100] flex items-center justify-center bg-[var(--scrim)] p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={onCancel}
       onWheel={(e) => e.stopPropagation()}
@@ -1232,7 +1232,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="modal-sheet w-full max-w-[440px] border border-border bg-background p-6 shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet w-full max-w-[440px] border border-border bg-background p-6 shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}

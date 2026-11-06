@@ -1,0 +1,118 @@
+/*
+ * CineTrack themes — one light, one dark, sharing a crimson accent.
+ *
+ *   Porcelain (light)  bright porcelain, cinema crimson   (default)
+ *   Noir      (dark)   dark graphite, cinema crimson tuned for dark
+ *
+ * Every theme defines the full token set below; nothing is derived at
+ * runtime. Text pairs meet WCAG AA (4.5:1) and test/theme.test.ts checks
+ * them, with one deliberate exception: Noir's crimson is tuned for fills
+ * (white text on it passes AA) and reads at about 3.7:1 as text on the dark
+ * ground, which passes for large text but not small. Status hues keep one meaning everywhere: neutral = planned,
+ * blue = watching, green = watched.
+ *
+ * Token roles
+ *   --background / --foreground   page ground and body text
+ *   --card                        raised surfaces (panels, popovers, cards)
+ *   --muted                       sunken surfaces (wells, skeletons, chips)
+ *   --secondary                   quiet fills (hover rows, segmented tracks)
+ *   --primary / --accent          brand ink; accent is the data highlight
+ *   --border / --border-strong    hairlines and emphasised dividers
+ *   --ring                        keyboard focus outline
+ *   --scrim / --scrim-soft        modal and drawer backdrops
+ *   --shadow-*                    elevation for popovers, sheets, drawers
+ *   --poster-edge                 hairline that frames poster art
+ *   --status-*-ink                status hue used as text on the page
+ */
+
+/* Porcelain is also the fallback when no theme attribute is set. */
+:root,
+[data-theme='porcelain'] {
+  color-scheme: light;
+  --background: #fbfaf8;
+  --foreground: #17161b;
+  --card: #ffffff;
+  --card-foreground: #17161b;
+  --muted: #f3f1ed;
+  --muted-foreground: #66636c;
+  --secondary: #eceae5;
+  --secondary-foreground: #34323a;
+  --primary: #c41e3a;
+  --primary-foreground: #ffffff;
+  --accent: #c41e3a;
+  --accent-foreground: #ffffff;
+  --destructive: #b42318;
+  --destructive-foreground: #ffffff;
+  --border: #e8e5df;
+  --border-strong: #d2cec6;
+  --ring: #c41e3a;
+  --toast-info: #2563c9;
+  --toast-success: #1f7a4d;
+  --toast-warning: #8f5a0a;
+  --toast-error: #b42318;
+  --toast-on: #ffffff;
+  --status-planned: #6b6873;
+  --status-planned-foreground: #ffffff;
+  --status-planned-ink: #5f5c66;
+  --status-watching: #2563c9;
+  --status-watching-foreground: #ffffff;
+  --status-watching-ink: #2158b8;
+  --status-watched: #1f7a4d;
+  --status-watched-foreground: #ffffff;
+  --status-watched-ink: #1b6e45;
+  --scrim: rgba(23, 22, 27, 0.48);
+  --scrim-soft: rgba(23, 22, 27, 0.26);
+  --shadow-pop: 0 1px 2px rgba(23, 22, 27, 0.05), 0 12px 32px -8px rgba(23, 22, 27, 0.14);
+  --shadow-sheet: 0 2px 6px rgba(23, 22, 27, 0.06), 0 32px 80px -24px rgba(23, 22, 27, 0.34);
+  --shadow-drawer: -1px 0 0 rgba(23, 22, 27, 0.03), -24px 0 56px -12px rgba(23, 22, 27, 0.18);
+  --poster-edge: rgba(23, 22, 27, 0.1);
+}
+
+[data-theme='noir'] {
+  color-scheme: dark;
+  --background: #161618;
+  --foreground: #f4f2ee;
+  --card: #1e1e21;
+  --card-foreground: #f4f2ee;
+  --muted: #222225;
+  --muted-foreground: #a8a6ad;
+  --secondary: #2a2a2e;
+  --secondary-foreground: #d9d6d0;
+  --primary: #d62d48;
+  --primary-foreground: #ffffff;
+  --accent: #d62d48;
+  --accent-foreground: #ffffff;
+  --destructive: #f47a6e;
+  --destructive-foreground: #1a0907;
+  --border: #2d2d31;
+  --border-strong: #414146;
+  --ring: #d62d48;
+  --toast-info: #8fb3f3;
+  --toast-success: #7ccfa2;
+  --toast-warning: #f0c76a;
+  --toast-error: #f79c92;
+  --toast-on: #161618;
+  --status-planned: #a3a0a8;
+  --status-planned-foreground: #161618;
+  --status-planned-ink: #b0adb5;
+  --status-watching: #7fa7f0;
+  --status-watching-foreground: #0a1120;
+  --status-watching-ink: #8fb3f3;
+  --status-watched: #6cc795;
+  --status-watched-foreground: #07170e;
+  --status-watched-ink: #7ccfa2;
+  --scrim: rgba(4, 3, 6, 0.7);
+  --scrim-soft: rgba(4, 3, 6, 0.5);
+  --shadow-pop: 0 0 0 1px rgba(255, 240, 240, 0.05), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --shadow-sheet: 0 0 0 1px rgba(255, 240, 240, 0.06), 0 40px 100px -20px rgba(0, 0, 0, 0.9);
+  --shadow-drawer: -1px 0 0 rgba(255, 240, 240, 0.05), -28px 0 64px -12px rgba(0, 0, 0, 0.7);
+  --poster-edge: rgba(244, 242, 238, 0.09);
+}
+
+/* Shared tokens, derived from each theme's own colours. */
+:root {
+  --radius: 2px;
+  /* Form-control borders need 3:1 against the page (WCAG 1.4.11). */
+  --input: color-mix(in srgb, var(--foreground) 48%, var(--background));
+  --selection: color-mix(in srgb, var(--primary) 26%, transparent);
+}

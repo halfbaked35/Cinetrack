@@ -30,7 +30,7 @@ import {
 } from '../lib/library'
 import { canSetDropped, statusOptionsFor, statusTransition } from '../lib/status'
 import { MAX_CUSTOM_POSTER_FILE_BYTES, prepareCustomPoster } from '../lib/custom-poster'
-import { getContrastColor, useSettings } from '../lib/settings'
+import { useSettings } from '../lib/settings'
 import { CarouselNav, CloseButton, ConfirmDialog, PosterTilt, Spinner, STATUS_BADGE, STATUS_INACTIVE, STATUS_STYLE, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap, usePosterArt, useTimedTooltip } from './ui'
 import { useToast } from './Toast'
 import CastDetail from './CastDetail'
@@ -279,7 +279,7 @@ export default function TitleDetail({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex justify-end bg-[rgba(20,19,15,0.42)] transition-opacity duration-[var(--dur-quick)] ${shown ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+      className={`fixed inset-0 z-50 flex justify-end bg-[var(--scrim-soft)] transition-opacity duration-[var(--dur-quick)] ${shown ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
       data-open={shown}
       onClick={onClose}
     >
@@ -288,7 +288,7 @@ export default function TitleDetail({
         role="dialog"
         aria-modal="true"
         aria-label={source ? `${entry?.title || titleOf(source)} — catalogue entry` : 'Catalogue entry'}
-        className="drawer-sheet relative flex h-full w-full max-w-[920px] flex-col overflow-hidden border-l border-border bg-background shadow-[-20px_0_48px_rgba(0,0,0,0.24)]"
+        className="drawer-sheet relative flex h-full w-full max-w-[920px] flex-col overflow-hidden border-l border-border bg-background shadow-[var(--shadow-drawer)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1013,7 +1013,7 @@ setShown(false)
 
   const content = (
     <div
-      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[var(--scrim)] p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={close}
       onWheel={(e) => e.stopPropagation()}
@@ -1025,7 +1025,7 @@ setShown(false)
         aria-modal="true"
         aria-label={`Status — ${title}`}
         style={{ width: '100%', maxWidth: '320px' }}
-        className="modal-sheet border border-border bg-background shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet border border-border bg-background shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1440,7 +1440,7 @@ function EditModal({
 
   return createPortal((
     <div
-      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[var(--scrim)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={close}
     >
@@ -1453,7 +1453,7 @@ function EditModal({
           e.preventDefault()
           save()
         }}
-        className="modal-sheet flex h-[min(82vh,520px)] w-full max-w-[420px] flex-col border border-border bg-background shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet flex h-[min(82vh,520px)] w-full max-w-[420px] flex-col border border-border bg-background shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
       >
@@ -1901,7 +1901,7 @@ function RewatchModal({
 
   return createPortal((
     <div
-      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[rgba(20,19,15,0.65)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
+      className={`modal-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-[var(--scrim)] p-3 sm:p-4 ${shown ? '' : 'pointer-events-none'}`}
       data-open={shown}
       onClick={close}
     >
@@ -1910,7 +1910,7 @@ function RewatchModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Rewatch log — ${title}`}
-        className="modal-sheet flex h-[min(80vh,500px)] w-full max-w-[420px] flex-col border border-border bg-background shadow-[0_30px_90px_-20px_rgba(0,0,0,0.65)]"
+        className="modal-sheet flex h-[min(80vh,500px)] w-full max-w-[420px] flex-col border border-border bg-background shadow-[var(--shadow-sheet)]"
         data-open={shown}
         onClick={(e) => e.stopPropagation()}
       >
@@ -2386,18 +2386,14 @@ function Seasons({
                           <span
                             className={`relative inline-flex h-11 w-11 shrink-0 items-center justify-center border transition-all duration-200 ${
                               done
-                                ? 'animate-stamp'
+                                ? 'animate-stamp border-[var(--status-watched)] bg-[var(--status-watched)] text-[var(--status-watched-foreground)]'
                                 : `border-border bg-card text-muted-foreground ${
                                     tracked
                                       ? 'group-hover/ep:border-[var(--primary)] group-hover/ep:bg-[var(--primary)]/[0.06] group-hover/ep:text-[var(--primary)]'
                                       : 'opacity-70'
                                   }`
                             }`}
-                            style={done ? {
-                              backgroundColor: settings.episodeWatchedColor,
-                              borderColor: settings.episodeWatchedColor,
-                              color: getContrastColor(settings.episodeWatchedColor),
-                            } : undefined}
+
                           >
                             {done ? (
                               <svg
