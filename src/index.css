@@ -187,7 +187,7 @@ html {
 [data-round-posters='true'] [data-poster-surface],
 [data-round-posters='true'] [data-poster-surface] img,
 [data-round-posters='true'] .poster-rounded {
-  border-radius: 14px;
+  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
