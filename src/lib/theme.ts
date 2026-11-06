@@ -4,18 +4,18 @@
  * the pre-paint boot script (public/theme-boot.js).
  */
 
-export const THEME_IDS = ['porcelain', 'noir'] as const
+export const THEME_IDS = ['paper', 'noir'] as const
 export type ThemeId = (typeof THEME_IDS)[number]
 
-export const DEFAULT_THEME: ThemeId = 'porcelain'
+export const DEFAULT_THEME: ThemeId = 'paper'
 
 /** What the user picks: a fixed theme, or follow the operating system. */
 export type ThemePreference = ThemeId | 'system'
 
-/** The theme the OS asks for right now: Noir in dark mode, else Porcelain. */
+/** The theme the OS asks for right now: Noir in dark mode, else Paper. */
 export function systemTheme(): ThemeId {
   try {
-    return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'noir' : 'porcelain'
+    return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'noir' : 'paper'
   } catch {
     return DEFAULT_THEME
   }
@@ -44,7 +44,7 @@ export type ThemeMeta = {
 }
 
 export const THEMES: readonly ThemeMeta[] = [
-  { id: 'porcelain', name: 'Porcelain', description: 'White and crimson', tone: 'light', themeColor: '#fbfaf8' },
+  { id: 'paper', name: 'Paper', description: 'White and oxblood red', tone: 'light', themeColor: '#ffffff' },
   { id: 'noir', name: 'Noir', description: 'Graphite and crimson', tone: 'dark', themeColor: '#161618' },
 ]
 
@@ -62,12 +62,12 @@ export function themeMeta(id: ThemeId): ThemeMeta {
  */
 const RETIRED_THEMES: Record<string, ThemeId> = {
   // Light themes from earlier redesigns.
-  frost: 'porcelain',
-  dawn: 'porcelain',
-  matinee: 'porcelain',
-  gallery: 'porcelain',
-  paper: 'porcelain',
-  blueprint: 'porcelain',
+  porcelain: 'paper',
+  frost: 'paper',
+  dawn: 'paper',
+  matinee: 'paper',
+  gallery: 'paper',
+  blueprint: 'paper',
   // Dark themes from earlier redesigns.
   nocturne: 'noir',
   dusk: 'noir',
@@ -89,7 +89,7 @@ export function resolveThemeId(raw: unknown, legacyCustomColors?: unknown): Them
         ? (legacyCustomColors as Record<string, unknown>).background
         : undefined
     if (typeof background === 'string' && isValidHex(background) && relativeLuminance(background) < 0.2) return 'noir'
-    return 'porcelain'
+    return 'paper'
   }
   return DEFAULT_THEME
 }

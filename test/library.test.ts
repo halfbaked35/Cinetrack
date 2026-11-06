@@ -320,7 +320,7 @@ describe('episode edits (hook)', () => {
 
 describe('database flush', () => {
   it('chunks a large pending batch into multiple requests', async () => {
-    // Start from an empty shelf so the batch contains exactly the 100 rows
+    // Start from an empty library so the batch contains exactly the 100 rows
     // below (no delete-tombstones from earlier tests mixed into the chunks).
     api.clear()
     await waitForQuiet(250)
@@ -357,7 +357,7 @@ describe('database flush', () => {
     const count = postCalls().length
     await sleep(1500)
     assert.equal(postCalls().length, count)
-    // The shelf is reconciled with what the database actually holds, so the
+    // The library is reconciled with what the database actually holds, so the
     // UI never shows a title that will vanish on reload…
     await settle(() => !api.get('tv', 200))
     // …and the rejection is surfaced instead of only logged.

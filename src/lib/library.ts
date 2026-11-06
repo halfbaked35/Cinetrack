@@ -109,7 +109,7 @@ function publish(next: Record<string, Entry>) {
 /* ---------- load / save status ---------- */
 
 export type LibraryStatus = {
-  /** The shelf has been loaded from the database; edits are allowed. */
+  /** The library has been loaded from the database; edits are allowed. */
   hydrated: boolean
   /** Why the initial load is failing (it keeps retrying), if it is. */
   loadError: string | null
@@ -369,7 +369,7 @@ let hydrationRunning = false
 /**
  * Load the canonical database, merge any records from the previous browser
  * store, and persist that one-time migration before removing the old copy.
- * A failed load retries with backoff; until it succeeds the shelf is
+ * A failed load retries with backoff; until it succeeds the library is
  * read-only, so nothing can be saved over records the app hasn't seen.
  */
 async function hydrateFromSqlite() {
@@ -594,7 +594,7 @@ export function useLibrary(subscribeToStore = true) {
     commit({ ...cache, [key]: updated }, { [key]: updated })
   }, [])
 
-  /** Erase the whole shelf. Returns the erased records so the caller can offer undo. */
+  /** Erase the whole library. Returns the erased records so the caller can offer undo. */
   const clear = useCallback((): Entry[] => {
     if (!status.hydrated) return []
     const erased = Object.values(cache)
@@ -602,13 +602,13 @@ export function useLibrary(subscribeToStore = true) {
     return erased
   }, [])
 
-  /** Replace the whole shelf with `next` (used by undo-erase and tests). */
+  /** Replace the whole library with `next` (used by undo-erase and tests). */
   const replaceAll = useCallback((next: Record<string, Entry>) => {
     if (!status.hydrated) return
     commit(sanitizeMap(next))
   }, [])
 
-  /** Merge imported records into the live shelf; only the touched keys are saved. */
+  /** Merge imported records into the live library; only the touched keys are saved. */
   const importEntries = useCallback((incoming: readonly Entry[]) => {
     if (!status.hydrated) return { imported: 0, combined: 0 }
     const next = { ...cache }
@@ -664,12 +664,12 @@ function commitEpisodeLog(key: string, entry: Entry, episodes: Record<string, nu
 export type ImportResult = {
   /** Valid records from the file, normalized (pass to `importEntries`). */
   entries: Entry[]
-  /** Preview of the shelf after merging into `existing`. */
+  /** Preview of the library after merging into `existing`. */
   merged: Record<string, Entry>
   imported: number
   skipped: number
   combined: number
-  /** Settings carried by a full backup file; absent for plain shelf exports. */
+  /** Settings carried by a full backup file; absent for plain library exports. */
   settings: Record<string, unknown> | null
 }
 
@@ -677,7 +677,7 @@ export type ImportResult = {
 export const BACKUP_FORMAT = 'cinetrack-backup'
 export const BACKUP_VERSION = 2
 
-/** Serialize the shelf (and optionally settings) into a versioned backup document. */
+/** Serialize the library (and optionally settings) into a versioned backup document. */
 export function buildBackup(entries: readonly Entry[], settings?: Record<string, unknown>): string {
   return JSON.stringify(
     {

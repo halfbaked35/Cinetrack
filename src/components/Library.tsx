@@ -26,7 +26,7 @@ function itemFor(entry: Entry): TmdbTitle {
   return item
 }
 
-const FILTER_LABEL: Record<ShelfFilter, string> = {
+const FILTER_LABEL: Record<LibraryFilter, string> = {
   all: 'All',
   watching: 'Watching',
   planned: 'Planned',
@@ -38,8 +38,8 @@ const FILTER_LABEL: Record<ShelfFilter, string> = {
 }
 
 type Tab = 'all' | 'movie' | 'tv' | 'favorites'
-type ShelfFilter = Status | 'rewatching' | 'rewatched' | 'all' | 'seen'
-export type LibraryView = { tab: Tab; filter: ShelfFilter }
+type LibraryFilter = Status | 'rewatching' | 'rewatched' | 'all' | 'seen'
+export type LibraryView = { tab: Tab; filter: LibraryFilter }
 const TABS: { id: Tab; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'movie', label: 'Films' },
@@ -47,7 +47,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'favorites', label: 'Favourites' },
 ]
 
-const FILTERS: ShelfFilter[] = ['all', 'watching', 'planned', 'watched', 'rewatching', 'rewatched', 'seen', 'dropped']
+const FILTERS: LibraryFilter[] = ['all', 'watching', 'planned', 'watched', 'rewatching', 'rewatched', 'seen', 'dropped']
 const SORTS = [
   { id: 'added', label: 'Recently added' },
   { id: 'lastWatched', label: 'Last watched' },
@@ -63,11 +63,11 @@ const RATING_OPTIONS = [
   { id: 9, label: '9+' },
 ] as const
 
-export type ShelfSort = (typeof SORTS)[number]['id']
+export type LibrarySort = (typeof SORTS)[number]['id']
 
-export function applyShelfFilters(
+export function applyLibraryFilters(
   pool: Entry[],
-  opts: { status: ShelfFilter; minRating: number; query: string; sort: ShelfSort },
+  opts: { status: LibraryFilter; minRating: number; query: string; sort: LibrarySort },
 ): Entry[] {
   let list = pool
   if (opts.status === 'rewatching') list = list.filter((e) => e.mediaType === 'tv' && e.rewatching)
@@ -106,18 +106,18 @@ export default function Library({
   const { entries } = useLibrary()
   const { hydrated } = useLibraryStatus()
   const { settings } = useSettings()
-  const [tab, setTab] = useState<Tab>(() => initialView?.tab ?? settings.defaultShelfTab)
-  const [filter, setFilter] = useState<ShelfFilter>(() => initialView?.filter ?? 'all')
+  const [tab, setTab] = useState<Tab>(() => initialView?.tab ?? settings.defaultLibraryTab)
+  const [filter, setFilter] = useState<LibraryFilter>(() => initialView?.filter ?? 'all')
   const [sort, setSort] = useState<(typeof SORTS)[number]['id']>(settings.defaultSort)
   const [minRating, setMinRating] = useState<(typeof RATING_OPTIONS)[number]['id']>(0)
   const [q, setQ] = useState('')
 
   useEffect(() => {
-    setTab(initialView?.tab ?? settings.defaultShelfTab)
+    setTab(initialView?.tab ?? settings.defaultLibraryTab)
     setFilter(initialView?.filter ?? 'all')
     setMinRating(0)
     setQ('')
-  }, [initialView, settings.defaultShelfTab])
+  }, [initialView, settings.defaultLibraryTab])
 
   // Saved preferences can arrive after the first render (deep link to #library).
   useEffect(() => {
@@ -133,7 +133,7 @@ export default function Library({
 
   const deferredQ = useDeferredValue(q)
   const shown = useMemo(
-    () => applyShelfFilters(pool, { status: filter, minRating, query: deferredQ, sort }),
+    () => applyLibraryFilters(pool, { status: filter, minRating, query: deferredQ, sort }),
     [pool, filter, minRating, deferredQ, sort],
   )
 
@@ -169,7 +169,7 @@ export default function Library({
   return (
     <div className="space-y-8">
       <SectionHead
-        title="Shelf"
+        title="Library"
         fullBleed
         headingLevel={1}
         titleClassName="text-[72px] sm:text-[88px]"
@@ -203,12 +203,12 @@ export default function Library({
             onSort={setSort}
             onMinRating={setMinRating}
           />
-          <SearchInput value={q} onChange={setQ} label="Search your shelf" placeholder="Search your shelf…" className="w-full sm:w-64 md:w-96" />
+          <SearchInput value={q} onChange={setQ} label="Search your library" placeholder="Search your library…" className="w-full sm:w-64 md:w-96" />
         </div>
       </div>
 
       <p className="sr-only" role="status" aria-live="polite">
-        {hydrated ? `${shown.length} title${shown.length === 1 ? '' : 's'} shown` : 'Loading your shelf'}
+        {hydrated ? `${shown.length} title${shown.length === 1 ? '' : 's'} shown` : 'Loading your library'}
       </p>
 
       {!hydrated ? (
@@ -219,7 +219,7 @@ export default function Library({
         </PosterGrid>
       ) : entries.length === 0 ? (
         <div className="space-y-3 text-center">
-          <Empty>No titles on this shelf yet</Empty>
+          <Empty>No titles here yet</Empty>
           <a
             href="#discover"
             className="press inline-block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground underline underline-offset-4 hover:text-[var(--primary)]"
@@ -233,7 +233,7 @@ export default function Library({
             {tab === 'favorites' && pool.length === 0
               ? 'No favourites yet — mark one with the heart on a title page'
               : deferredQ.trim()
-                ? `Nothing on your shelf matches “${deferredQ.trim()}”`
+                ? `Nothing in your library matches “${deferredQ.trim()}”`
                 : 'No titles match these filters'}
           </Empty>
           <button
@@ -275,12 +275,12 @@ function FilterBar({
   onSort,
   onMinRating,
 }: {
-  filter: ShelfFilter
+  filter: LibraryFilter
   showDropped: boolean
   sort: (typeof SORTS)[number]['id']
   minRating: (typeof RATING_OPTIONS)[number]['id']
   count: number
-  onFilter: (v: ShelfFilter) => void
+  onFilter: (v: LibraryFilter) => void
   onSort: (v: (typeof SORTS)[number]['id']) => void
   onMinRating: (v: (typeof RATING_OPTIONS)[number]['id']) => void
 }) {
@@ -375,7 +375,7 @@ function FilterBar({
       ref={boxRef}
       id="library-filter-popover"
       role="dialog"
-      aria-label="Filter shelf"
+      aria-label="Filter library"
       style={popoverStyle}
       onKeyDown={(e) => {
         // The popover is portaled to <body>; send Tab back into page order
@@ -469,7 +469,7 @@ function FilterBar({
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls="library-filter-popover"
-          aria-label={`Filter shelf${activeCount ? `, ${activeCount} active` : ''}`}
+          aria-label={`Filter library${activeCount ? `, ${activeCount} active` : ''}`}
           className={`press relative flex h-9 items-center justify-center gap-2 border px-3 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.14em] transition-colors duration-200 ${
             open || active
               ? 'border-[var(--primary)] bg-[var(--primary)] text-primary-foreground font-semibold shadow-xs'

@@ -1,15 +1,21 @@
 /*
- * CineTrack themes — one light, one dark, sharing a crimson accent.
+ * CineTrack themes — one light, one dark.
  *
- *   Porcelain (light)  bright porcelain, cinema crimson   (default)
- *   Noir      (dark)   dark graphite, cinema crimson tuned for dark
+ *   Paper (light)  true white stock, oxblood-red ink   (default)
+ *   Noir  (dark)   dark graphite, cinema crimson tuned for dark
+ *
+ * Paper is the original CineTrack theme, restored from src/theme-backup/
+ * with its colours unchanged except a brighter accent (#a32d1e, was
+ * #7a2318). The tokens added since (scrims, shadows, poster edge, strong
+ * border) use the values Paper's components had when they were hard-coded.
  *
  * Every theme defines the full token set below; nothing is derived at
  * runtime. Text pairs meet WCAG AA (4.5:1) and test/theme.test.ts checks
- * them, with one deliberate exception: Noir's crimson is tuned for fills
+ * them, with deliberate exceptions: Noir's crimson is tuned for fills
  * (white text on it passes AA) and reads at about 3.7:1 as text on the dark
- * ground, which passes for large text but not small. Status hues keep one meaning everywhere: neutral = planned,
- * blue = watching, green = watched.
+ * ground, which passes for large text but not small; and Paper keeps its
+ * original muted-text and destructive reds, a hair under AA on --muted. Status hues keep one
+ * meaning everywhere: neutral = planned, blue = watching, green = watched.
  *
  * Token roles
  *   --background / --foreground   page ground and body text
@@ -25,47 +31,47 @@
  *   --status-*-ink                status hue used as text on the page
  */
 
-/* Porcelain is also the fallback when no theme attribute is set. */
+/* Paper is also the fallback when no theme attribute is set. */
 :root,
-[data-theme='porcelain'] {
+[data-theme='paper'] {
   color-scheme: light;
-  --background: #fbfaf8;
-  --foreground: #17161b;
-  --card: #ffffff;
-  --card-foreground: #17161b;
-  --muted: #f3f1ed;
-  --muted-foreground: #66636c;
-  --secondary: #eceae5;
-  --secondary-foreground: #34323a;
-  --primary: #c41e3a;
-  --primary-foreground: #ffffff;
-  --accent: #c41e3a;
-  --accent-foreground: #ffffff;
-  --destructive: #b42318;
-  --destructive-foreground: #ffffff;
-  --border: #e8e5df;
-  --border-strong: #d2cec6;
-  --ring: #c41e3a;
-  --toast-info: #2563c9;
-  --toast-success: #1f7a4d;
-  --toast-warning: #8f5a0a;
-  --toast-error: #b42318;
+  --background: #ffffff;
+  --foreground: #14130f;
+  --card: #faf8f3;
+  --card-foreground: #14130f;
+  --muted: #f5f3ed;
+  --muted-foreground: #74705f;
+  --secondary: #f0ede4;
+  --secondary-foreground: #3a3730;
+  --primary: #a32d1e;
+  --primary-foreground: #fdfbf6;
+  --accent: #a32d1e;
+  --accent-foreground: #fdfbf6;
+  --destructive: #dc2626;
+  --destructive-foreground: #fdfbf6;
+  --border: #e3ded1;
+  --border-strong: #cdc6b6;
+  --ring: #a32d1e;
+  --toast-info: #1d4ed8;
+  --toast-success: #15803d;
+  --toast-warning: #a16207;
+  --toast-error: #b91c1c;
   --toast-on: #ffffff;
-  --status-planned: #6b6873;
+  --status-planned: #52525b;
   --status-planned-foreground: #ffffff;
-  --status-planned-ink: #5f5c66;
-  --status-watching: #2563c9;
+  --status-planned-ink: #52525b;
+  --status-watching: #2563eb;
   --status-watching-foreground: #ffffff;
-  --status-watching-ink: #2158b8;
-  --status-watched: #1f7a4d;
+  --status-watching-ink: #1d4ed8;
+  --status-watched: #15803d;
   --status-watched-foreground: #ffffff;
-  --status-watched-ink: #1b6e45;
-  --scrim: rgba(23, 22, 27, 0.48);
-  --scrim-soft: rgba(23, 22, 27, 0.26);
-  --shadow-pop: 0 1px 2px rgba(23, 22, 27, 0.05), 0 12px 32px -8px rgba(23, 22, 27, 0.14);
-  --shadow-sheet: 0 2px 6px rgba(23, 22, 27, 0.06), 0 32px 80px -24px rgba(23, 22, 27, 0.34);
-  --shadow-drawer: -1px 0 0 rgba(23, 22, 27, 0.03), -24px 0 56px -12px rgba(23, 22, 27, 0.18);
-  --poster-edge: rgba(23, 22, 27, 0.1);
+  --status-watched-ink: #166534;
+  --scrim: rgba(20, 19, 15, 0.65);
+  --scrim-soft: rgba(20, 19, 15, 0.42);
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.22);
+  --shadow-sheet: 0 30px 90px -20px rgba(0, 0, 0, 0.65);
+  --shadow-drawer: -20px 0 48px rgba(0, 0, 0, 0.24);
+  --poster-edge: rgba(20, 19, 15, 0.14);
 }
 
 [data-theme='noir'] {

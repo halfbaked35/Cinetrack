@@ -2,7 +2,7 @@
  * CineTrack's local API as plain Connect-style middleware, independent of
  * Vite so tests can mount it on a bare `http.Server`:
  *
- *   /__data/library   GET, HEAD, POST   the shelf (SQLite)
+ *   /__data/library   GET, HEAD, POST   the library (SQLite)
  *   /__data/settings  GET, HEAD, POST   preferences (SQLite)
  *   /__data/health    GET               storage status
  *   /api/tmdb/*       GET, HEAD         allow-listed TMDb proxy

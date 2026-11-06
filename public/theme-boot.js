@@ -2,10 +2,10 @@
 // light while settings load from the local database. Written by
 // src/lib/theme.ts; every value is re-validated here before use.
 ;(function () {
-  var THEMES = { porcelain: '#fbfaf8', noir: '#161618' }
+  var THEMES = { paper: '#ffffff', noir: '#161618' }
   // Themes retired in earlier redesigns map to the light or dark theme.
   var RETIRED = {
-    frost: 'porcelain', dawn: 'porcelain', matinee: 'porcelain', gallery: 'porcelain', paper: 'porcelain', blueprint: 'porcelain', custom: 'porcelain',
+    porcelain: 'paper', frost: 'paper', dawn: 'paper', matinee: 'paper', gallery: 'paper', blueprint: 'paper', custom: 'paper',
     nocturne: 'noir', dusk: 'noir', projector: 'noir', midnight: 'noir', velvet: 'noir', nitrate: 'noir', halide: 'noir', black: 'noir',
   }
   try {
@@ -14,9 +14,9 @@
     var hint = JSON.parse(raw)
     var root = document.documentElement
     var theme = hint && typeof hint.theme === 'string' ? hint.theme : ''
-    // "system" follows the OS: Noir in dark mode, Porcelain otherwise.
+    // "system" follows the OS: Noir in dark mode, Paper otherwise.
     if (theme === 'system') {
-      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'noir' : 'porcelain'
+      theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'noir' : 'paper'
     }
     if (!Object.prototype.hasOwnProperty.call(THEMES, theme)) {
       theme = Object.prototype.hasOwnProperty.call(RETIRED, theme) ? RETIRED[theme] : ''

@@ -1,5 +1,5 @@
 /**
- * `/__data/library` and `/__data/settings` — the shelf and preferences store.
+ * `/__data/library` and `/__data/settings` — the library and preferences store.
  *
  * Records are validated with the same rules the browser uses (src/lib/entry)
  * plus checks only the server can make: full decoding of custom poster images

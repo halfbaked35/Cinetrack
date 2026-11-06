@@ -147,11 +147,11 @@ function BrowseOptionsDropdown({
 }
 
 /**
- * One For You shelf — a single category of suggestions. `items` is the pool the
- * shelf deals from; `load` pulls a further TMDb page for the same category when
- * the shelf is shuffled, so a press can surface titles the pool never held.
+ * One For You section — a single category of suggestions. `items` is the pool the
+ * section deals from; `load` pulls a further TMDb page for the same category when
+ * the section is shuffled, so a press can surface titles the pool never held.
  */
-type Shelf = {
+type Section = {
   key: string
   title: string
   note?: string
@@ -159,12 +159,12 @@ type Shelf = {
   load: (page: number, signal?: AbortSignal) => Promise<TmdbTitle[]>
 }
 
-/** Plates per shelf: two stacked rows of the configured width. */
-const SHELF_ROWS = 2
-/** Candidates kept per shelf — deeper than one hand so shuffling has room. */
-const SHELF_POOL = 24
+/** Plates per section: two stacked rows of the configured width. */
+const SECTION_ROWS = 2
+/** Candidates kept per section — deeper than one hand so shuffling has room. */
+const SECTION_POOL = 24
 /** Ceiling for the runtime pool once shuffles start appending fresh pages. */
-const SHELF_POOL_CAP = SHELF_POOL * 3
+const SECTION_POOL_CAP = SECTION_POOL * 3
 /** Share of a hand drawn from the newest batch; the rest revisits the pool. */
 const FRESH_SHARE = 2 / 3
 const MAX_GRID_RESULTS = 300
@@ -210,7 +210,7 @@ function useDelayedLoading(active: boolean, requestKey: string, delayMs = 140) {
   return active && visibleKey === requestKey
 }
 
-/** Deterministic spread pick of genres so shelves vary by library but stay stable per session. */
+/** Deterministic spread pick of genres so sections vary by library but stay stable per session. */
 function hashStr(s: string): number {
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
@@ -259,7 +259,7 @@ export function shuffleWithSeed<T>(list: T[], seed: number): T[] {
 }
 
 /**
- * Deals one shelf hand: at most `slots` plates, two thirds of them from the
+ * Deals one section hand: at most `slots` plates, two thirds of them from the
  * batch the last shuffle pulled so the row visibly turns over, the rest from
  * the wider pool. A title never repeats inside a hand.
  */
@@ -281,32 +281,32 @@ export function dealSuggestions(fresh: TmdbTitle[], pool: TmdbTitle[], slots: nu
   return hand
 }
 
-/** Plates currently on screen in every mounted shelf, so a shuffle can steer around them. */
+/** Plates currently on screen in every mounted section, so a shuffle can steer around them. */
 type ClaimRegistry = { current: Map<string, Set<string>> }
 
-/** One category shelf: two fixed rows of plates with a shuffle control in the header. */
-function ShelfRow({
-  shelf,
+/** One category section: two fixed rows of plates with a shuffle control in the header. */
+function SuggestionSection({
+  section,
   claims,
   onOpen,
 }: {
-  shelf: Shelf
+  section: Section
   claims: ClaimRegistry
   onOpen: (t: MediaType, id: number, seed?: TmdbTitle) => void
 }) {
   const { get } = useLibrary()
   const { settings } = useSettings()
-  const columns = Math.max(1, settings.shelfColumns)
-  const slots = columns * SHELF_ROWS
+  const columns = Math.max(1, settings.forYouColumns)
+  const slots = columns * SECTION_ROWS
 
-  const [pool, setPool] = useState(shelf.items)
+  const [pool, setPool] = useState(section.items)
   const [fresh, setFresh] = useState<TmdbTitle[]>([])
   // A new mount gets a fresh hand; each shuffle advances the seed once.
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 0x1_0000_0000))
-  const [hand, setHand] = useState(() => dealSuggestions([], shelf.items, slots, seed))
+  const [hand, setHand] = useState(() => dealSuggestions([], section.items, slots, seed))
   const [busy, setBusy] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  // Every shelf is assembled from page one, so refreshes walk forward from there.
+  // Every section is assembled from page one, so refreshes walk forward from there.
   const pageRef = useRef(1)
   const busyRef = useRef(false)
   const requestRef = useRef<AbortController | null>(null)
@@ -317,16 +317,16 @@ function ShelfRow({
   )
   const previousVisible = useRef(new Set<string>())
 
-  // Publish this shelf's plates so a sibling shuffle never repeats one of them.
+  // Publish this section's plates so a sibling shuffle never repeats one of them.
   useEffect(() => {
     const registry = claims.current
     const keys = new Set(visible.map(plateKey))
-    registry.set(shelf.key, keys)
+    registry.set(section.key, keys)
     previousVisible.current = keys
     return () => {
-      registry.delete(shelf.key)
+      registry.delete(section.key)
     }
-  }, [claims, shelf.key, visible])
+  }, [claims, section.key, visible])
 
   useEffect(() => () => requestRef.current?.abort(), [])
 
@@ -339,13 +339,13 @@ function ShelfRow({
     requestRef.current = controller
     try {
       const page = pageRef.current + 1
-      const items = await shelf.load(page, controller.signal)
+      const items = await section.load(page, controller.signal)
       if (controller.signal.aborted || items.length === 0) return
       setRefreshError(null)
       pageRef.current = page
       const elsewhere = new Set<string>()
       for (const [otherKey, plates] of claims.current) {
-        if (otherKey === shelf.key) continue
+        if (otherKey === section.key) continue
         for (const plate of plates) elsewhere.add(plate)
       }
       const picked = items.filter((item) => !elsewhere.has(plateKey(item)))
@@ -353,15 +353,15 @@ function ShelfRow({
       setFresh(picked)
       setPool((prev) => {
         const held = new Set(prev.map(plateKey))
-        return [...picked.filter((item) => !held.has(plateKey(item))), ...prev].slice(0, SHELF_POOL_CAP)
+        return [...picked.filter((item) => !held.has(plateKey(item))), ...prev].slice(0, SECTION_POOL_CAP)
       })
     } catch {
-      if (!controller.signal.aborted) setRefreshError('Could not refresh this shelf. Check your connection and retry.')
+      if (!controller.signal.aborted) setRefreshError('Could not refresh this section. Check your connection and retry.')
     } finally {
       busyRef.current = false
       setBusy(false)
     }
-  }, [claims, shelf])
+  }, [claims, section])
 
   const shuffle = () => {
     if (busyRef.current) return
@@ -372,11 +372,11 @@ function ShelfRow({
   }
 
   return (
-    <section aria-label={shelf.title} aria-busy={busy}>
+    <section aria-label={section.title} aria-busy={busy}>
       <div className="relative z-20 mb-4 flex items-end justify-between gap-4 border-b border-border pb-2">
         <div className="min-w-0">
-          <h2 className="font-display truncate text-[22px]">{shelf.title}</h2>
-          {shelf.note && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{shelf.note}</p>}
+          <h2 className="font-display truncate text-[22px]">{section.title}</h2>
+          {section.note && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{section.note}</p>}
         </div>
         <button
           type="button"
@@ -385,7 +385,7 @@ function ShelfRow({
           }}
           // aria-disabled, not disabled: disabling the focused button would drop focus to <body>.
           aria-disabled={busy || undefined}
-          aria-label={`Shuffle ${shelf.title} suggestions`}
+          aria-label={`Shuffle ${section.title} suggestions`}
           className="press relative z-30 inline-flex shrink-0 items-center gap-1.5 border border-border bg-background px-3 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground hover:border-[var(--foreground)] hover:text-foreground aria-disabled:cursor-wait aria-disabled:opacity-60"
         >
           <ShuffleIcon className={`size-4 ${busy ? 'animate-spin' : ''}`} />
@@ -459,14 +459,14 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   const [activeFeedKey, setActiveFeedKey] = useState<string | null>(null)
   const [animatedRange, setAnimatedRange] = useState<{ start: number; end: number } | null>(null)
 
-  const [shelves, setShelves] = useState<Shelf[]>([])
-  const [shelvesLoading, setShelvesLoading] = useState(false)
-  const [shelvesError, setShelvesError] = useState<string | null>(null)
-  const [shelfRetry, setShelfRetry] = useState(0)
+  const [sections, setSections] = useState<Section[]>([])
+  const [sectionsLoading, setSectionsLoading] = useState(false)
+  const [sectionsError, setSectionsError] = useState<string | null>(null)
+  const [sectionRetry, setSectionRetry] = useState(0)
 
   const type: MediaType = mode === 'tv' ? 'tv' : 'movie'
   const searching = !!debounced
-  // For You browses shelf rows; every other view is the infinite grid
+  // For You browses section rows; every other view is the infinite grid
   const gridActive = mode !== 'suggested' || searching
 
   useEffect(() => {
@@ -498,7 +498,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   )
   const seedsRef = useRef(seeds)
   useEffect(() => { seedsRef.current = seeds }, [seeds])
-  /** Only the top three seeds feed the shelves; refresh when those change, not on every edit. */
+  /** Only the top three seeds feed the sections; refresh when those change, not on every edit. */
   const topSeedSig = seedSig.split(',').slice(0, 3).join(',')
 
   // Debounce search input
@@ -521,20 +521,20 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
     }
   }, [mode, type, settings.metadataLanguage, settingsReady])
 
-  const shelfToken = useRef(0)
-  // Plates on screen per shelf, shared so a shuffle never repeats one across categories.
+  const sectionToken = useRef(0)
+  // Plates on screen per section, shared so a shuffle never repeats one across categories.
   const claims = useRef(new Map<string, Set<string>>())
 
-  // For You shelves: per-seed picks + genre exploration + trending, assembled in parallel.
+  // For You sections: per-seed picks + genre exploration + trending, assembled in parallel.
   // Seeds drive the personal rows; genre rows deliberately reach beyond the library.
   useEffect(() => {
     if (gridActive || !settingsReady) return
     const controller = new AbortController()
     let live = true
-    const token = ++shelfToken.current
-    setShelvesLoading(true)
-    setShelvesError(null)
-    // Current shelves stay on screen until the new set is ready.
+    const token = ++sectionToken.current
+    setSectionsLoading(true)
+    setSectionsError(null)
+    // Current sections stay on screen until the new set is ready.
     const sig = topSeedSig
     ;(async () => {
       try {
@@ -557,7 +557,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             () => [] as { id: number; name: string }[],
           ),
         ])
-        if (!live || token !== shelfToken.current) return
+        if (!live || token !== sectionToken.current) return
         const genrePicks = pickGenres(movieGenres, sig, 3)
         const genreSorts = [
           { id: 'vote_average.desc', label: 'Top rated', gte: 200 },
@@ -578,8 +578,8 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             )
           }),
         )
-        if (!live || token !== shelfToken.current) return
-        // First occurrence wins — the same title never repeats across shelves
+        if (!live || token !== sectionToken.current) return
+        // First occurrence wins — the same title never repeats across sections
         const seen = new Set<string>()
         const take = (items: TmdbTitle[], n: number) => {
           const out: TmdbTitle[] = []
@@ -592,17 +592,17 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
           }
           return out
         }
-        const next: Shelf[] = []
+        const next: Section[] = []
         const allSeedItems: TmdbTitle[] = []
         for (const { items } of seedPages) {
           allSeedItems.push(...items)
         }
-        const libraryPicked = take(allSeedItems, SHELF_POOL)
+        const libraryPicked = take(allSeedItems, SECTION_POOL)
         if (libraryPicked.length >= 4 && topSeeds.length > 0) {
           next.push({
             key: 'from-library',
-            title: 'From your shelf',
-            note: 'Recommendations inspired by the titles on your shelf.',
+            title: 'From your library',
+            note: 'Recommendations inspired by the titles in your library.',
             items: libraryPicked,
             // A shuffle steps to the next seed, then walks that seed's later pages.
             load: (page, signal) => {
@@ -616,12 +616,12 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
           })
         }
         genrePages.forEach(({ genre, sort, items }) => {
-          const picked = take(items, SHELF_POOL)
+          const picked = take(items, SECTION_POOL)
           if (picked.length >= 4) {
             next.push({
               key: `genre-${genre.id}-${sort.label}`,
               title: `${sort.label} ${genre.name}`,
-              note: 'Beyond your shelf — something unlike the usual shelf.',
+              note: 'Beyond your library — something unlike your usual picks.',
               items: picked,
               load: (page, signal) =>
                 discover('movie', {
@@ -636,7 +636,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             })
           }
         })
-        const trendPicked = take(trendItems, SHELF_POOL)
+        const trendPicked = take(trendItems, SECTION_POOL)
         if (trendPicked.length >= 4) {
           next.push({
             key: 'trending-week',
@@ -646,18 +646,18 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             load: (page, signal) => trending('all', 'week', page, { signal }).then((r) => r.results, () => [] as TmdbTitle[]),
           })
         }
-        setShelves(next)
+        setSections(next)
       } catch (e) {
-        if (live && token === shelfToken.current) setShelvesError(e instanceof Error ? e.message : 'Failed to load suggestions')
+        if (live && token === sectionToken.current) setSectionsError(e instanceof Error ? e.message : 'Failed to load suggestions')
       } finally {
-        if (live && token === shelfToken.current) setShelvesLoading(false)
+        if (live && token === sectionToken.current) setSectionsLoading(false)
       }
     })()
     return () => {
       live = false
       controller.abort()
     }
-  }, [gridActive, settingsReady, topSeedSig, settings.includeAdult, settings.metadataLanguage, shelfRetry])
+  }, [gridActive, settingsReady, topSeedSig, settings.includeAdult, settings.metadataLanguage, sectionRetry])
 
   /** One page of whichever feed is active. Suggestions walk the seed list. */
   const fetchPage = useCallback(
@@ -790,7 +790,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
 
   // Reset and load page one when feed identity changes (mode/search/sort/genre/includeAdult)
   // Note: seedsRef is intentionally NOT a dep — adding a library item shouldn't wipe the grid
-  // Shelved For You has its own fetch path — the grid stays idle there
+  // For You sections have their own fetch path — the grid stays idle there
   useEffect(() => {
     if (!settingsReady) return
     feedControllerRef.current?.abort()
@@ -910,7 +910,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
           <h2 className="font-display text-[22px]">{`Search — “${debounced}”`}</h2>
         </div>
       )}
-      {!gridActive && shelvesLoading && shelves.length > 0 && (
+      {!gridActive && sectionsLoading && sections.length > 0 && (
         <span className="rule-label">Refreshing suggestions…</span>
       )}
       <span className="sr-only" role="status" aria-live="polite">
@@ -920,33 +920,33 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
             : searching && !displayError
               ? `${visibleResults.length} result${visibleResults.length === 1 ? '' : 's'} for ${debounced}`
               : ''
-          : shelvesLoading ? 'Loading suggestions' : ''}
+          : sectionsLoading ? 'Loading suggestions' : ''}
       </span>
       {!gridActive ? (
         <>
-          {shelvesError && (
+          {sectionsError && (
             <div role="alert" className="animate-fade flex items-center justify-between gap-4 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
-              <p className="font-sans text-[12px] text-[var(--primary)]">{shelvesError}</p>
+              <p className="font-sans text-[12px] text-[var(--primary)]">{sectionsError}</p>
               <button
                 type="button"
-                onClick={() => setShelfRetry((n) => n + 1)}
+                onClick={() => setSectionRetry((n) => n + 1)}
                 className="press shrink-0 border border-[var(--primary)] bg-[var(--primary)] px-3 py-1 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90"
               >
                 Retry
               </button>
             </div>
           )}
-          {shelvesLoading && shelves.length === 0 && !shelvesError && (
+          {sectionsLoading && sections.length === 0 && !sectionsError && (
             <div className="flex min-h-[50vh] items-center justify-center py-12 animate-fade" aria-live="polite">
               <Spinner size={38} />
             </div>
           )}
-          {!shelvesLoading && !shelvesError && shelves.length === 0 && (
-            <Empty>No suggestions yet — rate something in your shelf or try Trending</Empty>
+          {!sectionsLoading && !sectionsError && sections.length === 0 && (
+            <Empty>No suggestions yet — rate something in your library or try Trending</Empty>
           )}
-          {shelves.map((s, idx) => (
+          {sections.map((s, idx) => (
             <div key={s.key} className="animate-fade" style={{ animationDelay: `${idx * 40}ms` }}>
-              <ShelfRow shelf={s} claims={claims} onOpen={onOpen} />
+              <SuggestionSection section={s} claims={claims} onOpen={onOpen} />
             </div>
           ))}
         </>

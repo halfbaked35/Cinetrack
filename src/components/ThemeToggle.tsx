@@ -4,7 +4,7 @@ import { handleRadioGroupKeyDown } from './ui'
 
 const OPTIONS: { id: ThemePreference; label: string; icon: ReactNode }[] = [
   {
-    id: 'porcelain',
+    id: 'paper',
     label: 'Light',
     icon: (
       <>

@@ -84,7 +84,7 @@ export function SaveStatus() {
   )
 }
 
-/** Full-width notice while the shelf cannot be loaded; it keeps retrying. */
+/** Full-width notice while the library cannot be loaded; it keeps retrying. */
 export function LoadErrorBanner() {
   const { loadError } = useLibraryStatus()
   if (!loadError) return null
@@ -92,7 +92,7 @@ export function LoadErrorBanner() {
     <div role="alert" className="border-b border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-4 py-2.5 lg:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13px] text-foreground">
-          <strong className="font-medium">Your shelf couldn't be loaded.</strong> {loadError} Editing is paused until it loads.
+          <strong className="font-medium">Your library couldn't be loaded.</strong> {loadError} Editing is paused until it loads.
         </p>
         <button
           type="button"

@@ -217,7 +217,7 @@ export default function TitleDetail({
   // Stable identity so the season list doesn't re-run its effects every render.
   const airedSeasons = useMemo(() => data?.seasons?.filter((s) => s.episode_count > 0) ?? [], [data])
 
-  // Hero plate. The stored poster wins over the fetched one so a shelf that has
+  // Hero plate. The stored poster wins over the fetched one so a library that has
   // art never loses it to a detail response that came back bare.
   const heroPath = entry?.poster ?? source?.poster_path ?? null
   const heroSource = entry?.customPoster ?? img(heroPath, 'w342')
@@ -415,7 +415,7 @@ export default function TitleDetail({
                       disabled={!libraryStatus.hydrated}
                       onClick={() => {
                         add({ status: settings.defaultStatus })
-                        toast(`${displayTitle ?? 'Title'} added to your shelf`, 'success')
+                        toast(`${displayTitle ?? 'Title'} added to your library`, 'success')
                       }}
                       className="press animate-tick flex h-8 items-center gap-2 bg-[var(--primary)] px-5 font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-primary-foreground hover:opacity-85"
                     >
@@ -432,7 +432,7 @@ export default function TitleDetail({
                       >
                         <path d="M12 5v14M5 12h14" />
                       </svg>
-                      <span>Add to shelf</span>
+                      <span>Add to library</span>
                     </button>
                   ) : (
                     <>
@@ -524,8 +524,8 @@ export default function TitleDetail({
                           <PencilIcon />
                         </IconButton>
                         <IconButton
-                          label="Remove from shelf"
-                          tooltip="Remove from shelf"
+                          label="Remove from library"
+                          tooltip="Remove from library"
                           tone="danger"
                           hasPopup
                           onClick={() => setConfirmDeaccession(true)}
@@ -689,7 +689,7 @@ export default function TitleDetail({
 
         <ConfirmDialog
           open={confirmDeaccession}
-          title="Remove from shelf?"
+          title="Remove from library?"
           message={
             <>
               <strong className="text-foreground">{entry?.title || (source ? titleOf(source) : 'This title')}</strong> and its watch
@@ -703,7 +703,7 @@ export default function TitleDetail({
             const removed = entry
             setConfirmDeaccession(false)
             remove(type, id)
-            toast(`${name} removed from your shelf`, 'info', removed ? { action: { label: 'Undo', onAction: () => restore(removed) } } : undefined)
+            toast(`${name} removed from your library`, 'info', removed ? { action: { label: 'Undo', onAction: () => restore(removed) } } : undefined)
             onClose()
           }}
         />
@@ -1738,7 +1738,7 @@ className="h-8 w-full border border-border bg-background px-2.5 font-sans text-[
                     <div className="flex h-[72px] w-12 shrink-0 items-center justify-center border border-border bg-card font-sans text-[8px] uppercase tracking-[0.1em] text-muted-foreground">No poster</div>
                   )}
                   <p className="max-w-[34ch] font-sans text-[10px] leading-relaxed text-muted-foreground">
-                    JPEG, PNG, or WebP · up to {MAX_CUSTOM_POSTER_FILE_BYTES / 1024 / 1024} MB. Saved posters are resized for the shelf.
+                    JPEG, PNG, or WebP · up to {MAX_CUSTOM_POSTER_FILE_BYTES / 1024 / 1024} MB. Saved posters are resized for the library.
                   </p>
                 </div>
                 {posterProcessing && <p className="mt-2 font-sans text-[10px] text-muted-foreground" aria-live="polite">Preparing poster…</p>}
@@ -2179,7 +2179,7 @@ function Seasons({
             onClick={onAdd}
             className="press font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--primary)] underline underline-offset-4"
           >
-            Add to shelf to track
+            Add to library to track
           </button>
         </div>
       )}
@@ -2317,14 +2317,14 @@ function Seasons({
                           !tracked
                             ? completed && !rewatching
                               ? 'Start a rewatch to track new episode progress'
-                              : 'Add to shelf to track episodes'
+                              : 'Add to library to track episodes'
                             : done
                               ? `Watched${loggedAt ? ` · ${new Date(loggedAt).toLocaleDateString()}` : ''} · select again to unmark`
                               : `Mark ${episodeLabel} watched`
                         }
                         // Name the episode itself; aria-pressed carries the watched state.
                         aria-label={`${s.season_number === 0 ? 'Special' : `Season ${s.season_number}`}, episode ${e.episode_number}: ${e.name}${
-                          !tracked ? (completed && !rewatching ? ' (start a rewatch to track)' : ' (add to shelf to track)') : ''
+                          !tracked ? (completed && !rewatching ? ' (start a rewatch to track)' : ' (add to library to track)') : ''
                         }`}
                         aria-pressed={done}
                         onClick={() => {

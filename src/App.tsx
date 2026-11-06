@@ -30,7 +30,7 @@ const SettingsPanel = lazy(() => import('./components/SettingsPanel'))
 const NAV: { id: Page; label: string; key: string }[] = [
   { id: 'home', label: 'Home', key: '1' },
   { id: 'discover', label: 'Discover', key: '2' },
-  { id: 'library', label: 'Shelf', key: '3' },
+  { id: 'library', label: 'Library', key: '3' },
 ]
 
 const FOOTER_LINKS: { slug: InfoSlug; label: string }[] = [

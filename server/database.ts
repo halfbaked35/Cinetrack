@@ -292,7 +292,7 @@ export function createDatabase(options: { dataDir: string; wasmPath: string; max
     const lockPath = path.join(dir, LOCK_FILE)
     const owner = lockHeldByOther(lockPath)
     if (owner) {
-      throw new HttpError(423, `Another CineTrack server (process ${owner}) is using this shelf. Stop it, then reload this page.`)
+      throw new HttpError(423, `Another CineTrack server (process ${owner}) is using this library. Stop it, then reload this page.`)
     }
     fs.writeFileSync(lockPath, String(process.pid), { mode: 0o600 })
     ownedLock = lockPath

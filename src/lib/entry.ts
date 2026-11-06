@@ -1,5 +1,5 @@
 /**
- * The shelf record and its validation rules.
+ * The library record and its validation rules.
  *
  * This module is pure (no React, no DOM, no network) so the browser store and
  * the local API server share one definition of what a valid record is. Any

@@ -52,7 +52,7 @@ export class ErrorBoundary extends Component<Props, State> {
       ? 'Check that the CineTrack server is still running, then try again.'
       : import.meta.env.DEV
         ? error.message
-        : 'An unexpected error interrupted this view. Your shelf is safe.'
+        : 'An unexpected error interrupted this view. Your library is safe.'
 
     if (this.props.inline) {
       return (

@@ -10,7 +10,7 @@ import MastheadName from './MastheadName'
 const MonthlyChart = lazy(() => import('./MonthlyChart'))
 const TITLE_STOP_WORDS = new Set(['a', 'an', 'and', 'of', 'the'])
 
-// ponytail: title tokens approximate franchise membership; use shelf IDs if the library stores them.
+// ponytail: title tokens approximate franchise membership; use collection IDs if the library stores them.
 function titleWords(title: string) {
   return [...new Set((title.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter((word) => !TITLE_STOP_WORDS.has(word)))]
 }
@@ -41,7 +41,7 @@ function pickDiverse<T extends { title: string }>(items: T[], count: number) {
     if (picks.length === count) return picks
   }
 
-  // If the shelf is mostly one franchise, fill the remaining slots anyway.
+  // If the library is mostly one franchise, fill the remaining slots anyway.
   for (const item of shuffled) {
     if (!picks.includes(item)) picks.push(item)
     if (picks.length === count) break

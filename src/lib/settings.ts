@@ -41,7 +41,7 @@ export type Settings = {
   posterMotion: boolean
   libraryColumns: number
   discoverColumns: number
-  shelfColumns: number
+  forYouColumns: number
   includeAdult: boolean
   archiveName: string
   archiveItalicWordIndices: number[]
@@ -49,7 +49,7 @@ export type Settings = {
   defaultStatus: StartingStatus
   openAfterAdd: boolean
   defaultWatchDate: 'today' | 'blank'
-  defaultShelfTab: (typeof TAB_IDS)[number]
+  defaultLibraryTab: (typeof TAB_IDS)[number]
   defaultSort: (typeof SORT_IDS)[number]
   showCommunityScores: boolean
   dateStyle: 'absolute' | 'relative'
@@ -80,7 +80,7 @@ const DEFAULTS: Settings = {
   statusBadgeShadow: true,
   libraryColumns: 6,
   discoverColumns: 7,
-  shelfColumns: 6,
+  forYouColumns: 6,
   includeAdult: false,
   archiveName: DEFAULT_ARCHIVE_NAME,
   archiveItalicWordIndices: [2],
@@ -88,7 +88,7 @@ const DEFAULTS: Settings = {
   defaultStatus: 'planned',
   openAfterAdd: false,
   defaultWatchDate: 'today',
-  defaultShelfTab: 'all',
+  defaultLibraryTab: 'all',
   defaultSort: 'added',
   showCommunityScores: false,
   dateStyle: 'absolute',
@@ -139,8 +139,10 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
     out.defaultStatus = s.defaultStatus as StartingStatus
   }
   if (s.defaultWatchDate === 'today' || s.defaultWatchDate === 'blank') out.defaultWatchDate = s.defaultWatchDate
-  if ((TAB_IDS as readonly string[]).includes(s.defaultShelfTab as string)) {
-    out.defaultShelfTab = s.defaultShelfTab as Settings['defaultShelfTab']
+  // `defaultShelfTab` is the pre-rename key; a saved value still applies.
+  const libraryTab = s.defaultLibraryTab ?? s.defaultShelfTab
+  if ((TAB_IDS as readonly string[]).includes(libraryTab as string)) {
+    out.defaultLibraryTab = libraryTab as Settings['defaultLibraryTab']
   }
   if ((SORT_IDS as readonly string[]).includes(s.defaultSort as string)) {
     out.defaultSort = s.defaultSort as Settings['defaultSort']
@@ -152,7 +154,8 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
   }
   out.libraryColumns = clamp(s.libraryColumns, 3, 10, DEFAULTS.libraryColumns)
   out.discoverColumns = clamp(s.discoverColumns, 3, 10, DEFAULTS.discoverColumns)
-  out.shelfColumns = clamp(s.shelfColumns, 3, 10, DEFAULTS.shelfColumns)
+  // `shelfColumns` is the pre-rename key; a saved value still applies.
+  out.forYouColumns = clamp(s.forYouColumns ?? s.shelfColumns, 3, 10, DEFAULTS.forYouColumns)
   out.includeAdult = !!s.includeAdult
   out.roundPosters = !!s.roundPosters
   if (s.statusBadgeShape === 'circle' || s.statusBadgeShape === 'square' || s.statusBadgeShape === 'text') {
@@ -180,7 +183,7 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
  */
 let extraKeys: Record<string, unknown> = {}
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-const RETIRED_KEYS = new Set(['chartStyle', 'archiveItalicWordIndex', 'customColors', 'episodeWatchedColor'])
+const RETIRED_KEYS = new Set(['chartStyle', 'archiveItalicWordIndex', 'customColors', 'episodeWatchedColor', 'defaultShelfTab', 'shelfColumns'])
 /** The settings endpoint accepts ~10 KB per key and ~256 KB per request, so
  *  unknown keys are bounded here too — an oversized stray value would
  *  otherwise produce a body the server resets, wedging the retry loop. */
@@ -513,9 +516,25 @@ export function useSettingsHydrated(): boolean {
  * sanitizer as stored settings; unknown keys are kept only within the usual
  * bounds. Returns false if the payload was unusable.
  */
+/** Keys renamed over time: old name → current name. */
+const RENAMED_KEYS: Record<string, keyof Settings> = {
+  defaultShelfTab: 'defaultLibraryTab',
+  shelfColumns: 'forYouColumns',
+}
+
+/** Copy values saved under old key names onto the current names. */
+function upgradeRenamedKeys(raw: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...raw }
+  for (const [from, to] of Object.entries(RENAMED_KEYS)) {
+    if (from in out && !(to in out)) out[to] = out[from]
+  }
+  return out
+}
+
 export function importSettings(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
-  const incoming = raw as Record<string, unknown>
+  // An older backup's values must win over current ones, so rename before merging.
+  const incoming = upgradeRenamedKeys(raw as Record<string, unknown>)
   stashExtras(incoming, { merge: true })
   cache = sanitize({ ...cache, ...(incoming as Partial<Settings>) })
   try {
@@ -551,7 +570,7 @@ export function useSettings() {
     let sanitized: Settings[K] = value
     // Validate per-key
     if (key === 'theme') sanitized = resolveThemePreference(value) as Settings[K]
-    if ((key === 'libraryColumns' || key === 'discoverColumns' || key === 'shelfColumns') && typeof value === 'number') {
+    if ((key === 'libraryColumns' || key === 'discoverColumns' || key === 'forYouColumns') && typeof value === 'number') {
       sanitized = clamp(value as unknown as number, 3, 10, (DEFAULTS as Record<string, unknown>)[key] as number) as Settings[K]
     }
     if ((key === 'density' && value !== 'comfortable' && value !== 'compact')) {

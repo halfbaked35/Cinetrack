@@ -57,7 +57,7 @@ export const sameRoute = (a: Route, b: Route) =>
   a.page === b.page && a.info === b.info && a.settings === b.settings &&
   a.title?.type === b.title?.type && a.title?.id === b.title?.id
 
-const PAGE_LABEL: Record<Page, string> = { home: 'Home', discover: 'Discover', library: 'Shelf' }
+const PAGE_LABEL: Record<Page, string> = { home: 'Home', discover: 'Discover', library: 'Library' }
 const INFO_LABEL: Record<InfoSlug, string> = { about: 'About', privacy: 'Privacy', terms: 'Terms', api: 'API' }
 
 export function documentTitleFor(route: Route): string {

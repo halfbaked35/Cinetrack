@@ -6,26 +6,26 @@ CineTrack is a personal home for everything you watch. Track films and TV shows,
 
 ## What it does
 
-- **Build your shelf.** Mark titles as Planned, Watching, Watched, or Dropped.
+- **Build your library.** Mark titles as Planned, Watching, Watched, or Dropped.
 - **Track TV properly.** Tick off single episodes or whole seasons, and follow rewatches separately.
 - **Make it personal.** Add ratings, favourites, notes, watch dates, and even your own poster images.
-- **Discover new things.** Search TMDb, browse what's trending, and get "For You" picks based on your shelf.
+- **Discover new things.** Search TMDb, browse what's trending, and get "For You" picks based on your library.
 - **See your habits.** The home dashboard shows monthly charts, hours watched, and title counts.
-- **Make it yours.** Switch between light, dark, or follow your system setting, and adjust the layout.
-- **Stay portable.** Export a full backup (shelf and preferences) to a JSON file, or restore one, from Settings.
+- **Make it yours.** Switch between the light Paper theme and the dark Noir theme, or follow your system setting, and adjust the layout.
+- **Stay portable.** Export a full backup (library and preferences) to a JSON file, or restore one, from Settings.
 
 ![Title details and episode tracking](screenshots/titlepreview.png)
 
 ## How it works
 
-CineTrack is a local web app. Your shelf lives in a small SQLite database inside the project folder (`data/database.sqlite`), not on a remote server. Title information comes from The Movie Database (TMDb) through a local proxy, so your API key never reaches the browser; posters load directly from TMDb's image servers.
+CineTrack is a local web app. Your library lives in a small SQLite database inside the project folder (`data/database.sqlite`), not on a remote server. Title information comes from The Movie Database (TMDb) through a local proxy, so your API key never reaches the browser; posters load directly from TMDb's image servers.
 
 - **Saves are durable.** Every change is written to a temporary file and atomically swapped in, so a crash or power cut can't leave a half-written database. A restore point (`data/database.sqlite.bak`) is taken each time the server starts.
-- **Damage is never overwritten.** If the database file fails SQLite's integrity check, CineTrack refuses to read or write it and tells you, rather than starting over with an empty shelf.
-- **One server per shelf.** A lock file stops two CineTrack servers (say `npm run dev` and `npm run start`) from writing the same database.
+- **Damage is never overwritten.** If the database file fails SQLite's integrity check, CineTrack refuses to read or write it and tells you, rather than starting over with an empty library.
+- **One server per library.** A lock file stops two CineTrack servers (say `npm run dev` and `npm run start`) from writing the same database.
 - **Save status is visible.** The header shows when a save is slow or failing, and the browser warns before closing a tab with unsaved changes.
 
-Your records are also portable: Settings can export the whole shelf and your preferences to a JSON backup and restore it later. Restoring merges into the current shelf; it never deletes anything.
+Your records are also portable: Settings can export the whole library and your preferences to a JSON backup and restore it later. Restoring merges into the current library; it never deletes anything.
 
 ## Built with
 
@@ -71,7 +71,7 @@ Then open <http://127.0.0.1:8443>. To run the optimized build instead, use `npm 
 
 ## Security model
 
-CineTrack is a single-user app for your own machine. The server listens only on `127.0.0.1`, accepts requests only from loopback addresses with a local `Host` header (blocking DNS-rebinding attacks), and requires same-origin requests for every API call, so other websites can neither read nor change your shelf. It does not authenticate other programs or user accounts running on the same computer; don't run it on a shared machine you don't trust.
+CineTrack is a single-user app for your own machine. The server listens only on `127.0.0.1`, accepts requests only from loopback addresses with a local `Host` header (blocking DNS-rebinding attacks), and requires same-origin requests for every API call, so other websites can neither read nor change your library. It does not authenticate other programs or user accounts running on the same computer; don't run it on a shared machine you don't trust.
 
 The TMDb proxy only allows read-only requests to a fixed set of endpoints and parameters, never follows redirects, and caches responses. The production build ships with a strict Content Security Policy.
 
@@ -87,8 +87,8 @@ The TMDb proxy only allows read-only requests to a fixed set of endpoints and pa
 
 Code layout:
 
-- `src/` — the React app. `src/lib/entry.ts` defines a shelf record and its validation, shared by the browser and the server.
-- `server/` — the local API (`api.ts`), SQLite storage (`database.ts`), shelf and settings routes, and the TMDb proxy, mounted into Vite by `plugin.ts`.
+- `src/` — the React app. `src/lib/entry.ts` defines a library record and its validation, shared by the browser and the server.
+- `server/` — the local API (`api.ts`), SQLite storage (`database.ts`), library and settings routes, and the TMDb proxy, mounted into Vite by `plugin.ts`.
 - `test/` — `node:test` suites; no extra test framework needed.
 
 ## Acknowledgements

@@ -74,7 +74,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
 
   const importLibrary = async (file: File) => {
     if (!hydrated) {
-      toast('Your shelf is still loading — try again in a moment', 'warning')
+      toast('Your library is still loading — try again in a moment', 'warning')
       return
     }
     if (file.size > MAX_LIBRARY_FILE_BYTES) {
@@ -83,8 +83,8 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
     }
     try {
       const text = await file.text()
-      // Merge against the live shelf at commit time, not the `entries` this
-      // render saw: the shelf may have changed while the file was read.
+      // Merge against the live library at commit time, not the `entries` this
+      // render saw: the library may have changed while the file was read.
       const result = parseLibraryImport(text, [])
       const { imported, combined } = importEntries(result.entries)
       const restoredSettings = result.settings ? importSettings(result.settings) : false
@@ -100,7 +100,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
     }
   }
 
-  const eraseShelf = () => {
+  const eraseLibrary = () => {
     const erased = clear()
     setConfirmWipe(false)
     if (erased.length === 0) return
@@ -269,7 +269,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
               onChange={(v) => set('showNavHints', v)}
             />
             <NumberChoices
-              label="Shelf items per row"
+              label="Library items per row"
               value={settings.libraryColumns}
               min={3}
               max={10}
@@ -284,11 +284,11 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             />
             <NumberChoices
               label="For You suggestions per row"
-              note="Each category shelf stacks two rows"
-              value={settings.shelfColumns}
+              note="Each category stacks two rows"
+              value={settings.forYouColumns}
               min={3}
               max={10}
-              onChange={(v) => set('shelfColumns', v)}
+              onChange={(v) => set('forYouColumns', v)}
             />
             <OptionsRow
               label="Poster image quality"
@@ -440,17 +440,17 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             />
           </Group>
 
-          <Group title="Shelf defaults">
+          <Group title="Library defaults">
             <OptionsRow
-              label="Default shelf tab"
-              value={settings.defaultShelfTab}
+              label="Default library tab"
+              value={settings.defaultLibraryTab}
               options={[
                 { id: 'all', label: 'All' },
                 { id: 'movie', label: 'Films' },
                 { id: 'tv', label: 'TV' },
                 { id: 'favorites', label: 'Favourites' },
               ]}
-              onChange={(v) => set('defaultShelfTab', v)}
+              onChange={(v) => set('defaultLibraryTab', v)}
             />
             <OptionsRow
               label="Default sort order"
@@ -536,7 +536,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             <div className="pt-3 border-t border-border">
               <div className="rule-label mb-1 text-[10px]">Backup & restore</div>
               <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
-                A backup holds your shelf and preferences. Restoring merges it into the current shelf; nothing is deleted.
+                A backup holds your library and preferences. Restoring merges it into the current library; nothing is deleted.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -578,7 +578,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
                 onClick={() => setConfirmWipe(true)}
                 className="press flex w-full items-center justify-center border border-[var(--destructive)] bg-[var(--destructive)] py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--destructive-foreground)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Erase entire shelf
+                Erase entire library
               </button>
             </div>
           </Group>
@@ -586,16 +586,16 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
 
         <ConfirmDialog
           open={confirmWipe}
-          title="Erase entire shelf?"
+          title="Erase entire library?"
           message={
             <span>
               This deletes all <strong>{entries.length}</strong> titles, ratings and logged episodes from your local database.
               You can undo right afterwards; to keep a copy, export a backup first.
             </span>
           }
-          confirmLabel="Erase shelf"
+          confirmLabel="Erase library"
           onCancel={() => setConfirmWipe(false)}
-          onConfirm={eraseShelf}
+          onConfirm={eraseLibrary}
         />
       </aside>
     </>

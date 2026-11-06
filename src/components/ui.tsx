@@ -148,7 +148,7 @@ const STATUS_TEXT_ON: Record<Status, string> = {
   dropped: 'text-[var(--background)]',
 }
 
-/** Per-status colour so a shelf reads at a glance with minimalist colored circles. */
+/** Per-status colour so a library reads at a glance with minimalist colored circles. */
 export const STATUS_BADGE: Record<Status, { bg: string; dot: string; label: string; icon: ReactNode }> = {
   planned: {
     bg: STATUS_STYLE.planned,
@@ -726,8 +726,8 @@ export const Poster = memo(function Poster({
   const posterMotion = useSetting('posterMotion')
   const defaultStatus = useSetting('defaultStatus')
   const openAfterAdd = useSetting('openAfterAdd')
-  // Posters receive their entry from the shelf parent. Avoid subscribing each
-  // individual card to the whole store; one shelf-level subscription is enough.
+  // Posters receive their entry from the grid parent. Avoid subscribing each
+  // individual card to the whole store; one library-level subscription is enough.
   const { upsert } = useLibrary(false)
   const { toast } = useToast()
   const type: MediaType = mediaTypeOf(item)
@@ -817,16 +817,16 @@ export const Poster = memo(function Poster({
           ) : (
             <button
               type="button"
-              aria-label={`Add ${titleOf(item)} to shelf`}
-              title="Add to shelf"
+              aria-label={`Add ${titleOf(item)} to library`}
+              title="Add to library"
               onClick={(e) => {
                 e.stopPropagation()
                 if (!isLibraryHydrated()) {
-                  toast('Your shelf is still loading — try again in a moment', 'warning')
+                  toast('Your library is still loading — try again in a moment', 'warning')
                   return
                 }
                 upsert(type, item.id, { title: titleOf(item), poster: item.poster_path, year: yearOf(item), status: defaultStatus })
-                toast(`${titleOf(item)} added to your shelf`, 'success')
+                toast(`${titleOf(item)} added to your library`, 'success')
                 if (openAfterAdd) onOpen(type, item.id, item)
               }}
               className="press flex h-6 w-6 cursor-pointer items-center justify-center bg-[var(--primary)] text-primary-foreground opacity-0 shadow-md transition-all duration-200 hover:scale-110 hover:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
@@ -942,7 +942,7 @@ export function SearchInput({
 }: {
   value: string
   onChange: (v: string) => void
-  /** Accessible name, e.g. "Search your shelf". */
+  /** Accessible name, e.g. "Search your library". */
   label: string
   placeholder?: string
   className?: string

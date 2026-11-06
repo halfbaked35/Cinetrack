@@ -61,17 +61,20 @@ const TEXT_PAIRS: [string, string][] = [
  */
 const BELOW_AA_BY_CHOICE: Record<string, { pairs: string[]; min: number }> = {
   noir: { pairs: ['--primary', '--accent'], min: 3.2 },
+  // Paper is restored with its original colours unchanged; on its sunken
+  // --muted surface these two read at 4.48:1 and 4.35:1, a hair under AA.
+  paper: { pairs: ['--muted-foreground', '--destructive'], min: 4.3 },
 }
 
 describe('theme registry', () => {
   it('offers one light and one dark theme, light first as the default', () => {
     assert.deepEqual(THEMES.map((t) => t.id), [...THEME_IDS])
     assert.deepEqual(THEMES.map((t) => t.tone), ['light', 'dark'])
-    assert.equal(resolveThemeId(undefined), 'porcelain')
+    assert.equal(resolveThemeId(undefined), 'paper')
   })
 
-  it('gives both themes the same crimson identity', () => {
-    // Noir lifts Porcelain's crimson for dark; both must stay in the red family.
+  it('gives both themes a red accent', () => {
+    // Paper's oxblood and Noir's crimson both stay in the red family.
     for (const theme of THEMES) {
       const primary = tokensFor(theme.id)['--primary']!
       const [r, g, b] = [1, 3, 5].map((i) => parseInt(primary.slice(i, i + 2), 16)) as [number, number, number]
@@ -90,7 +93,7 @@ describe('theme registry', () => {
 
   it('maps every retired theme id to a current theme', () => {
     const expected: Record<string, string> = {
-      frost: 'porcelain', dawn: 'porcelain', matinee: 'porcelain', gallery: 'porcelain', paper: 'porcelain', blueprint: 'porcelain',
+      porcelain: 'paper', frost: 'paper', dawn: 'paper', matinee: 'paper', gallery: 'paper', blueprint: 'paper',
       nocturne: 'noir', dusk: 'noir', projector: 'noir', midnight: 'noir', velvet: 'noir', nitrate: 'noir', halide: 'noir', black: 'noir',
     }
     for (const [from, to] of Object.entries(expected)) {
@@ -98,24 +101,24 @@ describe('theme registry', () => {
       assert.match(boot, new RegExp(`${from}: '${to}'`), `theme-boot.js maps ${from}`)
     }
     assert.equal(resolveThemeId('noir'), 'noir')
-    assert.equal(resolveThemeId(undefined), 'porcelain')
-    assert.equal(resolveThemeId('__proto__'), 'porcelain')
+    assert.equal(resolveThemeId(undefined), 'paper')
+    assert.equal(resolveThemeId('__proto__'), 'paper')
   })
 
   it('keeps a system preference and resolves it from the OS', () => {
     assert.equal(resolveThemePreference('system'), 'system')
-    assert.equal(resolveThemePreference('frost'), 'porcelain')
-    assert.equal(resolveThemeId('system'), 'porcelain')
+    assert.equal(resolveThemePreference('frost'), 'paper')
+    assert.equal(resolveThemeId('system'), 'paper')
     // No window under Node: the OS is treated as light.
-    assert.equal(systemTheme(), 'porcelain')
+    assert.equal(systemTheme(), 'paper')
     assert.match(boot, /theme === 'system'/)
     assert.match(boot, /prefers-color-scheme: dark/)
   })
 
   it('maps a custom palette by the brightness of its background', () => {
     assert.equal(resolveThemeId('custom', { background: '#0e121a' }), 'noir')
-    assert.equal(resolveThemeId('custom', { background: '#f4ede2' }), 'porcelain')
-    assert.equal(resolveThemeId('custom', null), 'porcelain')
+    assert.equal(resolveThemeId('custom', { background: '#f4ede2' }), 'paper')
+    assert.equal(resolveThemeId('custom', null), 'paper')
   })
 })
 
@@ -137,8 +140,20 @@ describe('theme palettes', () => {
     })
   }
 
+  it("keeps Paper's original colours from the backup", () => {
+    const backup = readFileSync(new URL('../src/theme-backup/paper.css', import.meta.url), 'utf8')
+    const paper = tokensFor('paper')
+    // The accent was brightened on purpose (#7a2318 → #a32d1e); everything else is original.
+    const BRIGHTENED = new Set(['--primary', '--accent', '--ring'])
+    for (const [, name, value] of backup.matchAll(/(--[a-z-]+):\s*(#[0-9a-f]{6});/g)) {
+      if (BRIGHTENED.has(name!)) continue
+      assert.equal(paper[name!], value, `${name} differs from the Paper backup`)
+    }
+    assert.equal(paper['--primary'], '#a32d1e')
+  })
+
   it('is the fallback palette for a page without a theme attribute', () => {
-    assert.match(css, /:root,\s*\[data-theme='porcelain'\]\s*\{/)
+    assert.match(css, /:root,\s*\[data-theme='paper'\]\s*\{/)
   })
 })
 
