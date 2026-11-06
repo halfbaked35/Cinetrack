@@ -1,162 +1,36 @@
 import { useCallback, useSyncExternalStore } from 'react'
-import type { MediaType, TmdbTitle } from './tmdb'
-import { isSafeImagePath, titleOf, yearOf } from './tmdb'
+import type { TmdbTitle } from './tmdb'
+import { titleOf, yearOf } from './tmdb'
 import { currentSettings } from './settings'
 import { setPersistenceState } from './persistence'
-import { advanceRewatch, appendRewatchStamp, canSetDropped, MAX_REWATCHES, STATUS_IDS, statusAfterEpisodeProgress, watchedAtAfterProgress, type Status } from './status'
-import { isSafeCustomPosterDataUrl } from './custom-poster'
+import { advanceRewatch, appendRewatchStamp, canSetDropped, MAX_REWATCHES, statusAfterEpisodeProgress, watchedAtAfterProgress, type Status } from './status'
+import {
+  entryKey,
+  epKey,
+  isValidTimestamp,
+  MAX_IMPORT_ENTRIES,
+  normalizeEntry,
+  normalizeKeyedEntry,
+  type Entry,
+  type MediaType,
+} from './entry'
 export type { Status } from './status'
-
-export type Entry = {
-  id: number
-  mediaType: MediaType
-  title: string
-  year: string
-  poster: string | null
-  /** Compact WebP image uploaded by the user; the TMDb poster path stays in `poster`. */
-  customPoster: string | null
-  backdrop: string | null
-  rating: number | null // personal 1–10
-  status: Status
-  favorite: boolean
-  addedAt: number
-  /** Movies: timestamp of the watch. */
-  watchedAt: number | null
-  runtime: number | null
-  /** TV: "season-episode" → timestamp watched. */
-  episodes: Record<string, number>
-  totalEpisodes: number | null
-  /** Timestamps of additional complete watch-throughs, beyond the first. */
-  rewatches: number[]
-  /** A TV rewatch is tracked separately from the original completed run. */
-  rewatching: boolean
-  rewatchEpisodes: Record<string, number>
-  /** Retired: free-text notes were removed from the UI. Kept for back-compat. */
-  note?: string
-}
+export type { Entry } from './entry'
+export { entryKey, epKey, isSafeKey, isValidTimestamp, normalizeEntry } from './entry'
 
 const LEGACY_STORAGE = 'archive.library.v1'
 const LEGACY_CORRUPT_STORAGE = 'archive.library.v1.corrupt'
-export const epKey = (s: number, e: number) => `${s}-${e}`
-export const entryKey = (type: MediaType, id: number) => `${type}:${id}`
-
-/** Hard bounds mirror the server; custom poster images have their own strict cap. */
-const MAX_TITLE_LEN = 200
-const MAX_NOTE_LEN = 2000
-const MAX_POSTER_LEN = 500
-const MAX_BACKDROP_LEN = 500
-const MAX_RUNTIME = 600
-const MAX_TOTAL_EPISODES = 10000
-const MAX_EPISODE_KEYS = 20000
-const MAX_TIMESTAMP = 8_640_000_000_000_000
 export const MAX_LIBRARY_FILE_BYTES = 80 * 1024 * 1024
-
-/** Map keys must be `movie:<id>` / `tv:<id>` — anything else (incl. __proto__
- *  style keys from crafted data) is dropped before it can touch the store. */
-export function isSafeKey(key: unknown): key is string {
-  if (typeof key !== 'string') return false
-  const match = /^(movie|tv):(\d+)$/.exec(key)
-  return !!match && Number.isSafeInteger(Number(match[2])) && Number(match[2]) > 0
-}
-
-function finiteOrNull(n: unknown): number | null {
-  return typeof n === 'number' && Number.isFinite(n) ? n : null
-}
-
-export function isValidTimestamp(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && Math.abs(value) <= MAX_TIMESTAMP
-}
-
-/**
- * Bring a stored record up to the current shape in place: rename the
- * retired 'completed' status, coerce every scalar, and drop malformed episode
- * / rewatch timestamps — so one bad row can never crash a whole view.
- */
-export function normalizeEntry(entry: Entry): Entry {
-  if ((entry.status as string) === 'completed') entry.status = 'watched'
-  if (!STATUS_IDS.includes(entry.status)) entry.status = 'planned'
-  if (entry.mediaType !== 'movie' && entry.mediaType !== 'tv') entry.mediaType = 'movie'
-  // Movies have no Dropped state. Keep every other field and move legacy
-  // movie records to Planned so their existing data remains intact.
-  if (entry.mediaType === 'movie' && entry.status === 'dropped') entry.status = 'planned'
-  if (!Number.isSafeInteger(entry.id) || (entry.id as number) <= 0) entry.id = 0
-  if (typeof entry.title !== 'string' || !entry.title) entry.title = 'Untitled'
-  else entry.title = entry.title.slice(0, MAX_TITLE_LEN)
-  if (typeof entry.year !== 'string') entry.year = ''
-  else entry.year = entry.year.slice(0, 4)
-  if (typeof entry.poster !== 'string' || entry.poster.length > MAX_POSTER_LEN || !isSafeImagePath(entry.poster)) entry.poster = null
-  if (!isSafeCustomPosterDataUrl(entry.customPoster)) entry.customPoster = null
-  if (typeof entry.backdrop !== 'string' || entry.backdrop.length > MAX_BACKDROP_LEN || !isSafeImagePath(entry.backdrop)) entry.backdrop = null
-  if (typeof entry.rating !== 'number' || !Number.isInteger(entry.rating) || entry.rating < 1 || entry.rating > 10) {
-    entry.rating = null
-  }
-  entry.favorite = !!entry.favorite
-  entry.addedAt = isValidTimestamp(entry.addedAt) ? entry.addedAt : Date.now()
-  entry.watchedAt = isValidTimestamp(entry.watchedAt) ? entry.watchedAt : null
-  const runtime = finiteOrNull(entry.runtime)
-  entry.runtime = runtime == null ? null : Math.min(MAX_RUNTIME, Math.max(0, Math.floor(runtime)))
-  const total = finiteOrNull(entry.totalEpisodes)
-  entry.totalEpisodes = total == null ? null : Math.min(MAX_TOTAL_EPISODES, Math.max(0, Math.floor(total)))
-  if (!entry.episodes || typeof entry.episodes !== 'object') entry.episodes = {}
-  else {
-    const keys = Object.keys(entry.episodes)
-    for (const [k, v] of Object.entries(entry.episodes)) {
-      if (!/^\d+-\d+$/.test(k) || !isValidTimestamp(v)) delete entry.episodes[k]
-    }
-    // Bound per-entry growth so one crafted row can't stall every commit.
-    if (keys.length > MAX_EPISODE_KEYS) {
-      const keep = new Set(keys.filter((k) => /^\d+-\d+$/.test(k)).slice(-MAX_EPISODE_KEYS))
-      for (const k of Object.keys(entry.episodes)) if (!keep.has(k)) delete entry.episodes[k]
-    }
-  }
-  // Dropped is only meaningful while a show has recorded progress; the server
-  // rejects Dropped rows with an empty log, and a rejected batch would retry
-  // forever and block every later save. Normalize before that can happen.
-  if (entry.mediaType === 'tv' && entry.status === 'dropped' && Object.keys(entry.episodes).length === 0) {
-    entry.status = 'planned'
-  }
-  if (!entry.rewatchEpisodes || typeof entry.rewatchEpisodes !== 'object' || Array.isArray(entry.rewatchEpisodes)) {
-    entry.rewatchEpisodes = {}
-  } else {
-    for (const [k, v] of Object.entries(entry.rewatchEpisodes)) {
-      if (!/^\d+-\d+$/.test(k) || !isValidTimestamp(v)) delete entry.rewatchEpisodes[k]
-    }
-    const keys = Object.keys(entry.rewatchEpisodes)
-    if (keys.length > MAX_EPISODE_KEYS) {
-      const keep = new Set(keys.slice(-MAX_EPISODE_KEYS))
-      for (const k of keys) if (!keep.has(k)) delete entry.rewatchEpisodes[k]
-    }
-  }
-  if (!Array.isArray(entry.rewatches)) entry.rewatches = []
-  else entry.rewatches = entry.rewatches.filter(isValidTimestamp).slice(-MAX_REWATCHES)
-  entry.rewatching = entry.mediaType === 'tv' && entry.status === 'watched' && entry.rewatching === true
-  if (entry.mediaType !== 'tv') entry.rewatchEpisodes = {}
-  if (typeof entry.note === 'string' && entry.note.length > MAX_NOTE_LEN) entry.note = entry.note.slice(0, MAX_NOTE_LEN)
-  else if (entry.note != null && typeof entry.note !== 'string') entry.note = undefined
-  return entry
-}
 
 /** Validate + normalize a raw id-keyed map, dropping unsafe keys entirely. */
 function sanitizeMap(raw: unknown): Record<string, Entry> {
   const out: Record<string, Entry> = {}
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
   let dropped = 0
-  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-    if (!isSafeKey(k) || !v || typeof v !== 'object') {
-      dropped++
-      continue
-    }
-    try {
-      const normalized = normalizeEntry(v as Entry)
-      const [mediaType, rawId] = k.split(':')
-      if (normalized.mediaType !== mediaType || normalized.id !== Number(rawId)) {
-        dropped++
-        continue
-      }
-      out[k] = normalized
-    } catch {
-      dropped++
-    }
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const normalized = normalizeKeyedEntry(key, value)
+    if (normalized) out[key] = normalized
+    else dropped++
   }
   if (dropped > 0) console.warn(`[library] dropped ${dropped} invalid stored rows`)
   return out
@@ -204,17 +78,64 @@ function mergeTimestampHistory(first: number[], second: number[]): number[] {
 }
 
 const listeners = new Set<() => void>()
+const subscribeStore = (fn: () => void) => {
+  listeners.add(fn)
+  return () => {
+    listeners.delete(fn)
+  }
+}
 const noopSubscribe = () => () => {}
 let cache = readLegacySnapshot()
 const legacySnapshot = { ...cache }
-const changedDuringHydration = new Map<string, Entry | null>()
-let clearedDuringHydration = false
 /**
  * Stable array snapshot. Rebuilt only on commit, so consumers can safely use
  * `entries` as a hook dependency — a fresh Object.values() per render would
  * invalidate every downstream useMemo/useCallback and loop their effects.
  */
 let snapshot = Object.values(cache)
+
+function publish(next: Record<string, Entry>) {
+  cache = next
+  snapshot = Object.values(next)
+  for (const fn of [...listeners]) {
+    try {
+      fn()
+    } catch (e) {
+      console.error('[library] subscriber failed', e)
+    }
+  }
+}
+
+/* ---------- load / save status ---------- */
+
+export type LibraryStatus = {
+  /** The shelf has been loaded from the database; edits are allowed. */
+  hydrated: boolean
+  /** Why the initial load is failing (it keeps retrying), if it is. */
+  loadError: string | null
+  /** Why the latest save was rejected or is being retried, if it was. */
+  saveError: string | null
+}
+let status: LibraryStatus = { hydrated: false, loadError: null, saveError: null }
+const statusListeners = new Set<() => void>()
+function setStatus(patch: Partial<LibraryStatus>) {
+  const next = { ...status, ...patch }
+  if (next.hydrated === status.hydrated && next.loadError === status.loadError && next.saveError === status.saveError) return
+  status = next
+  for (const fn of [...statusListeners]) fn()
+}
+const subscribeStatus = (fn: () => void) => {
+  statusListeners.add(fn)
+  return () => {
+    statusListeners.delete(fn)
+  }
+}
+export function useLibraryStatus(): LibraryStatus {
+  return useSyncExternalStore(subscribeStatus, () => status, () => status)
+}
+export function isLibraryHydrated(): boolean {
+  return status.hydrated
+}
 
 /**
  * SQLite at data/database.sqlite is the persistent source of truth. Existing
@@ -223,30 +144,39 @@ let snapshot = Object.values(cache)
  */
 const DB_ENDPOINT = '/__data/library'
 
-let hydrating = true
-let mutatedDuringHydration = false
-
-/** Coalesce rapid per-record changes; edits in another tab remain untouched. */
+/** Coalesce rapid per-record changes; the latest value per key wins. */
 const pendingDatabaseChanges = new Map<string, Entry | null>()
 let pendingDatabaseClear = false
 let databaseWriteRunning = false
 let databaseRetryTimer: ReturnType<typeof setTimeout> | null = null
 let databaseRetryDelay = 1000
 
-/**
- * Largest serialized body per save request. Each chunk must sit comfortably
- * under the server's 64 MB body cap so a big import or an organic backlog can
- * never trip the 413 path (whose socket reset used to loop the retry forever).
- * A single entry is far below this, so chunking never splits one row.
- */
-const MAX_CHANGES_REQUEST_BYTES = 24 * 1024 * 1024
+/** Per-request bounds, comfortably under the server's 32 MB / 5,000-key caps. */
+const MAX_CHANGES_REQUEST_BYTES = 16 * 1024 * 1024
+const MAX_CHANGES_REQUEST_KEYS = 1000
 /** Statuses that can never succeed on retry: the batch is invalid or oversized. */
-const PERMANENT_DB_FAILURE_STATUSES = new Set([400, 404, 405, 413, 414, 422])
+const PERMANENT_DB_FAILURE_STATUSES = new Set([400, 404, 405, 413, 414, 415, 422])
+
+/** True while edits exist that the database has not confirmed. */
+export function hasUnsavedLibraryChanges(): boolean {
+  return databaseWriteRunning || pendingDatabaseClear || pendingDatabaseChanges.size > 0
+}
+
+async function readErrorMessage(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown }
+    if (typeof body?.error === 'string' && body.error) return body.error.slice(0, 200)
+  } catch {
+    // Not JSON.
+  }
+  return `The database answered ${res.status}`
+}
 
 /** Take up to one request's worth of pending changes out of the queue. */
 function takeDatabaseChangesChunk(): Record<string, Entry | null> {
   const out: Record<string, Entry | null> = {}
   let bytes = 0
+  let count = 0
   for (const [key, value] of pendingDatabaseChanges) {
     let entryBytes: number
     if (value == null) {
@@ -259,9 +189,10 @@ function takeDatabaseChangesChunk(): Record<string, Entry | null> {
       }
     }
     const total = bytes + key.length + entryBytes
-    if (Object.keys(out).length > 0 && total > MAX_CHANGES_REQUEST_BYTES) break
+    if (count > 0 && (total > MAX_CHANGES_REQUEST_BYTES || count >= MAX_CHANGES_REQUEST_KEYS)) break
     out[key] = value
     bytes = total
+    count++
   }
   for (const key of Object.keys(out)) pendingDatabaseChanges.delete(key)
   return out
@@ -276,6 +207,24 @@ function scheduleDatabaseRetry() {
   databaseRetryDelay = Math.min(databaseRetryDelay * 2, 30_000)
 }
 
+/** After the server refused some keys, show what it actually holds for them. */
+async function reconcileKeys(keys: string[]) {
+  try {
+    const res = await fetch(DB_ENDPOINT, { cache: 'no-store' })
+    if (!res.ok) return
+    const stored = sanitizeMap(await res.json())
+    const next = { ...cache }
+    for (const key of keys) {
+      if (pendingDatabaseChanges.has(key)) continue // A newer local edit is on its way.
+      if (stored[key]) next[key] = stored[key]
+      else delete next[key]
+    }
+    publish(next)
+  } catch {
+    // Best effort; the next reload shows the stored state anyway.
+  }
+}
+
 async function flushDatabaseChanges() {
   if (databaseWriteRunning || (!pendingDatabaseClear && pendingDatabaseChanges.size === 0)) return
   if (databaseRetryTimer) {
@@ -284,15 +233,17 @@ async function flushDatabaseChanges() {
   }
   databaseWriteRunning = true
   setPersistenceState('library', 'saving')
-  let permanentFailure = false
+  const rejectedKeys: string[] = []
+  let rejection: string | null = null
+  let retrying = false
   try {
-    while ((pendingDatabaseClear || pendingDatabaseChanges.size > 0) && !permanentFailure) {
+    while (pendingDatabaseClear || pendingDatabaseChanges.size > 0) {
       const clearLibrary = pendingDatabaseClear
       pendingDatabaseClear = false
       const changes = takeDatabaseChangesChunk()
       const body = JSON.stringify({ clear: clearLibrary, changes })
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 8000)
+      const timeout = setTimeout(() => controller.abort(), 20_000)
       try {
         const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
         const keepalive = hidden && new TextEncoder().encode(body).byteLength <= 64 * 1024
@@ -304,32 +255,30 @@ async function flushDatabaseChanges() {
           signal: controller.signal,
         })
         if (!res.ok) {
-          const message = (await res.text().catch(() => '')).slice(0, 200)
-          const permanent =
-            PERMANENT_DB_FAILURE_STATUSES.has(res.status) || /too large/i.test(message)
-          if (permanent) {
-            // Retrying can never succeed. Drop the rejected batch so it cannot
-            // wedge every later write behind an eternal retry loop; the
-            // in-memory shelf stays intact for this session.
-            console.error(
-              `[library] database permanently rejected a batch of ${Object.keys(changes).length} change(s) (${res.status}${message ? ` — ${message}` : ''}); the batch was dropped and will not be retried`,
-            )
-            permanentFailure = true
+          const message = await readErrorMessage(res)
+          if (PERMANENT_DB_FAILURE_STATUSES.has(res.status)) {
+            // Retrying can never succeed. Drop only this batch so it cannot
+            // wedge later saves, and carry on with the rest of the queue.
+            console.error(`[library] the database rejected ${Object.keys(changes).length} change(s): ${message}`)
+            rejection = message
+            rejectedKeys.push(...Object.keys(changes))
             continue
           }
-          throw new Error(`Database rejected update (${res.status})`)
+          throw new Error(message)
         }
         clearLegacyStorage()
         databaseRetryDelay = 1000
       } catch (e) {
-        // Keep the latest value per key. If a newer edit arrived during this
-        // request, it already occupies the map and must win over this batch.
+        // Keep the latest value per key: a newer edit made during this
+        // request already occupies the map and must win over this batch.
         for (const [key, value] of Object.entries(changes)) {
-          if (!pendingDatabaseChanges.has(key)) pendingDatabaseChanges.set(key, value as Entry | null)
+          if (!pendingDatabaseChanges.has(key)) pendingDatabaseChanges.set(key, value)
         }
         if (clearLibrary) pendingDatabaseClear = true
         console.warn('[library] database unavailable; changes will be retried', e)
-        setPersistenceState('library', 'error')
+        const aborted = (e as Error).name === 'AbortError'
+        setStatus({ saveError: aborted ? 'Saving is taking longer than expected — retrying.' : "Can't reach the local database — retrying." })
+        retrying = true
         scheduleDatabaseRetry()
         break
       } finally {
@@ -338,32 +287,30 @@ async function flushDatabaseChanges() {
     }
   } finally {
     databaseWriteRunning = false
-    if (permanentFailure) {
-      const dropped = pendingDatabaseChanges.size
-      pendingDatabaseChanges.clear()
-      pendingDatabaseClear = false
-      if (dropped > 0) {
-        console.error(`[library] ${dropped} further pending change(s) dropped after a permanent database rejection`)
-      }
+    if (rejection) {
+      setStatus({ saveError: `Some changes couldn't be saved: ${rejection}` })
+      setPersistenceState('library', 'error')
+      void reconcileKeys(rejectedKeys)
+    } else if (retrying) {
       setPersistenceState('library', 'error')
     } else if (!pendingDatabaseClear && pendingDatabaseChanges.size === 0) {
+      setStatus({ saveError: null })
       setPersistenceState('library', 'saved')
     }
   }
 }
 
 function saveToDatabase(changes: Record<string, Entry | null>, clearLibrary = false) {
-  if (hydrating) {
-    mutatedDuringHydration = true
-    return
+  if (clearLibrary) {
+    // The clear supersedes every queued change and per-key deletion.
+    pendingDatabaseClear = true
+    pendingDatabaseChanges.clear()
   }
-  if (clearLibrary) pendingDatabaseClear = true
-  for (const [key, value] of Object.entries(changes)) pendingDatabaseChanges.set(key, value)
+  for (const [key, value] of Object.entries(changes)) {
+    if (clearLibrary && value === null) continue
+    pendingDatabaseChanges.set(key, value)
+  }
   if (pendingDatabaseClear || pendingDatabaseChanges.size > 0) void flushDatabaseChanges()
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => void flushDatabaseChanges())
 }
 
 function diffEntries(before: Record<string, Entry>, after: Record<string, Entry>) {
@@ -375,129 +322,155 @@ function diffEntries(before: Record<string, Entry>, after: Record<string, Entry>
   return changes
 }
 
-// Hydration completion signal
-const libraryHydrationListeners = new Set<() => void>()
-function notifyLibraryHydrated() {
-  for (const fn of [...libraryHydrationListeners]) fn()
-}
-export function subscribeLibraryHydrated(cb: () => void): () => void {
-  if (!hydrating) { cb(); return () => {} }
-  libraryHydrationListeners.add(cb)
-  return () => libraryHydrationListeners.delete(cb)
-}
-export function isLibraryHydrated(): boolean {
-  return !hydrating
-}
-/**
- * Load the canonical database, merge any records from the previous browser
- * store, and persist that one-time migration before removing the old copy.
- */
-async function hydrateFromSqlite() {
-  let databaseSnapshot: Record<string, Entry> | null = null
-  let rawDatabaseSnapshot: unknown = null
-  try {
-    if (typeof fetch !== 'function') return
-    const controller = new AbortController()
-    const t = setTimeout(() => controller.abort(), 2500)
-    const res = await fetch(DB_ENDPOINT, { signal: controller.signal }).catch(() => null as unknown as Response)
-    clearTimeout(t)
-    if (!res?.ok) return
-    const ct = res.headers.get('content-type') || ''
-    if (!ct.includes('application/json')) return
-    rawDatabaseSnapshot = await res.json()
-    databaseSnapshot = sanitizeMap(rawDatabaseSnapshot)
-  } catch {
-    // Keep the legacy data in memory and in place until the database is reachable.
-  } finally {
-    hydrating = false
-    if (databaseSnapshot) {
-      const merged = clearedDuringHydration ? {} : { ...databaseSnapshot }
-      if (!clearedDuringHydration) {
-        for (const [key, legacyEntry] of Object.entries(legacySnapshot)) {
-          const storedEntry = merged[key]
-          merged[key] = storedEntry ? mergeMigratedEntry(legacyEntry, storedEntry) : legacyEntry
-        }
-      }
-      for (const [key, changedEntry] of changedDuringHydration) {
-        if (changedEntry) merged[key] = changedEntry
-        else delete merged[key]
-      }
-      const changes = diffEntries(databaseSnapshot, merged)
-      // sanitizeMap normalizes the in-memory copy, so explicitly persist this
-      // one-time status correction for legacy movie rows in SQLite as well.
-      if (rawDatabaseSnapshot && typeof rawDatabaseSnapshot === 'object' && !Array.isArray(rawDatabaseSnapshot)) {
-        for (const [key, value] of Object.entries(rawDatabaseSnapshot)) {
-          if (!isSafeKey(key) || !value || typeof value !== 'object' || Array.isArray(value)) continue
-          const rawEntry = value as Partial<Entry>
-          if (
-            rawEntry.mediaType === 'movie' &&
-            rawEntry.status === 'dropped' &&
-            databaseSnapshot[key] &&
-            !clearedDuringHydration &&
-            !changedDuringHydration.has(key)
-          ) changes[key] = merged[key] ?? databaseSnapshot[key]
-        }
-      }
-      const databaseChanged = Object.keys(changes).length > 0
-      cache = merged
-      snapshot = Object.values(merged)
-      for (const fn of [...listeners]) {
-        try { fn() } catch (e) { console.error('[library] subscriber failed', e) }
-      }
-      if (databaseChanged || mutatedDuringHydration || clearedDuringHydration) saveToDatabase(changes, clearedDuringHydration)
-      else {
-        clearLegacyStorage()
-        setPersistenceState('library', 'saved')
-      }
-    } else {
-      // Keep legacy records and any edits made while hydration was pending.
-      // The server applies these as patches, so retrying cannot erase data it
-      // already holds even though its initial snapshot was unavailable.
-      const changes: Record<string, Entry | null> = { ...cache }
-      for (const [key, value] of changedDuringHydration) changes[key] = value
-      if (Object.keys(changes).length > 0 || clearedDuringHydration) saveToDatabase(changes, clearedDuringHydration)
-      else setPersistenceState('library', 'error')
+/* ---------- cross-tab sync ---------- */
+
+type TabMessage = { changes: Record<string, Entry | null>; clear: boolean }
+const tabChannel: BroadcastChannel | null =
+  typeof window !== 'undefined' && typeof BroadcastChannel === 'function' ? new BroadcastChannel('cinetrack-library') : null
+
+/** Apply another tab's committed edits so this tab never saves stale rows over them. */
+tabChannel?.addEventListener('message', (event: MessageEvent<TabMessage>) => {
+  if (!status.hydrated) return // This tab loads fresh data from the database anyway.
+  const data = event.data
+  if (!data || typeof data !== 'object' || !data.changes || typeof data.changes !== 'object') return
+  const next = data.clear === true ? {} : { ...cache }
+  for (const [key, value] of Object.entries(data.changes)) {
+    if (value === null) {
+      delete next[key]
+      continue
     }
-    mutatedDuringHydration = false
-    notifyLibraryHydrated()
+    const entry = normalizeKeyedEntry(key, value)
+    if (entry) next[key] = entry
+  }
+  publish(next)
+})
+
+function commit(next: Record<string, Entry>, changes = diffEntries(cache, next), clearLibrary = false) {
+  // Subscribers first: the UI reflects edits even if the database is offline.
+  publish(next)
+  saveToDatabase(changes, clearLibrary)
+  try {
+    const shared = clearLibrary
+      ? Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== null))
+      : changes
+    tabChannel?.postMessage({ changes: shared, clear: clearLibrary } satisfies TabMessage)
+  } catch {
+    // Other tabs pick the change up on their next load.
   }
 }
 
-function commit(next: Record<string, Entry>, changes = diffEntries(cache, next), clearLibrary = false) {
-  if (hydrating) {
-    for (const [key, value] of Object.entries(changes)) changedDuringHydration.set(key, value)
-    if (clearLibrary) clearedDuringHydration = true
-  }
-  cache = next
-  snapshot = Object.values(next)
-  // Subscribers first: the UI reflects edits even if the database is offline.
-  for (const fn of [...listeners]) {
+/* ---------- initial load ---------- */
+
+let hydrationAttempt = 0
+let hydrationTimer: ReturnType<typeof setTimeout> | null = null
+let hydrationRunning = false
+
+/**
+ * Load the canonical database, merge any records from the previous browser
+ * store, and persist that one-time migration before removing the old copy.
+ * A failed load retries with backoff; until it succeeds the shelf is
+ * read-only, so nothing can be saved over records the app hasn't seen.
+ */
+async function hydrateFromSqlite() {
+  if (status.hydrated || hydrationRunning) return
+  if (typeof fetch !== 'function') return
+  hydrationRunning = true
+  let raw: unknown
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 15_000)
     try {
-      fn()
-    } catch (e) {
-      console.error('[library] subscriber failed', e)
+      const res = await fetch(DB_ENDPOINT, { signal: controller.signal, cache: 'no-store' })
+      if (!res.ok) throw new Error(await readErrorMessage(res))
+      if (!(res.headers.get('content-type') ?? '').includes('application/json')) {
+        throw new Error('The local database returned an unexpected response.')
+      }
+      raw = await res.json()
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (error) {
+    hydrationRunning = false
+    const message = error instanceof TypeError || (error as Error).name === 'AbortError'
+      ? "Can't reach the local database. Is the CineTrack server running?"
+      : (error as Error).message
+    setStatus({ loadError: message })
+    setPersistenceState('library', 'error')
+    const delay = Math.min(30_000, 1000 * 2 ** hydrationAttempt++)
+    hydrationTimer = setTimeout(() => {
+      hydrationTimer = null
+      void hydrateFromSqlite()
+    }, delay)
+    return
+  }
+  hydrationRunning = false
+
+  const databaseSnapshot = sanitizeMap(raw)
+  const merged = { ...databaseSnapshot }
+  for (const [key, legacyEntry] of Object.entries(legacySnapshot)) {
+    const storedEntry = merged[key]
+    merged[key] = storedEntry ? mergeImportedEntry(legacyEntry, storedEntry) : legacyEntry
+  }
+  const changes = diffEntries(databaseSnapshot, merged)
+  // sanitizeMap normalizes the in-memory copy, so explicitly persist the
+  // one-time status correction for legacy movie rows in SQLite as well.
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw)) {
+      const rawEntry = value as Partial<Entry> | null
+      if (merged[key] && rawEntry?.mediaType === 'movie' && rawEntry.status === 'dropped') changes[key] = merged[key]
     }
   }
-  saveToDatabase(changes, clearLibrary)
+  setStatus({ hydrated: true, loadError: null })
+  publish(merged)
+  if (Object.keys(changes).length > 0) saveToDatabase(changes)
+  else {
+    clearLegacyStorage()
+    setPersistenceState('library', 'saved')
+  }
+}
+
+/** Retry a failed initial load right away (e.g. from a "Retry" button). */
+export function retryLibraryLoad() {
+  if (status.hydrated) return
+  if (hydrationTimer) {
+    clearTimeout(hydrationTimer)
+    hydrationTimer = null
+  }
+  hydrationAttempt = 0
+  void hydrateFromSqlite()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    retryLibraryLoad()
+    void flushDatabaseChanges()
+  })
+  window.addEventListener('focus', () => {
+    if (status.loadError) retryLibraryLoad()
+  })
+  // Hidden pages may be frozen or discarded: push queued edits out now.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void flushDatabaseChanges()
+  })
 }
 
 void hydrateFromSqlite()
 
+/* ---------- React bindings ---------- */
+
+/** Subscribe to a single record: re-renders only when that title changes. */
+export function useEntry(type: MediaType, id: number): Entry | undefined {
+  const key = entryKey(type, id)
+  return useSyncExternalStore(subscribeStore, () => cache[key], () => cache[key])
+}
+
 export function useLibrary(subscribeToStore = true) {
-  const entries = useSyncExternalStore(
-    subscribeToStore
-      ? (fn) => {
-          listeners.add(fn)
-          return () => listeners.delete(fn)
-        }
-      : noopSubscribe,
-    () => snapshot,
-    () => snapshot,
-  )
+  const entries = useSyncExternalStore(subscribeToStore ? subscribeStore : noopSubscribe, () => snapshot, () => snapshot)
 
   const get = useCallback((type: MediaType, id: number) => cache[entryKey(type, id)], [])
 
   const upsert = useCallback((type: MediaType, id: number, patch: Partial<Entry>, seed?: TmdbTitle) => {
+    if (!status.hydrated) return
     if ((type !== 'movie' && type !== 'tv') || !Number.isSafeInteger(id) || id <= 0) return
     const key = entryKey(type, id)
     const existing = cache[key]
@@ -527,14 +500,25 @@ export function useLibrary(subscribeToStore = true) {
   }, [])
 
   const remove = useCallback((type: MediaType, id: number) => {
+    if (!status.hydrated) return
     if ((type !== 'movie' && type !== 'tv') || !Number.isSafeInteger(id) || id <= 0) return
     const next = { ...cache }
     delete next[entryKey(type, id)]
     commit(next, { [entryKey(type, id)]: null })
   }, [])
 
+  /** Put back a record exactly as it was (undo for delete and edits). */
+  const restore = useCallback((entry: Entry) => {
+    if (!status.hydrated) return
+    const key = entryKey(entry.mediaType, entry.id)
+    const normalized = normalizeKeyedEntry(key, entry)
+    if (!normalized) return
+    commit({ ...cache, [key]: normalized }, { [key]: normalized })
+  }, [])
+
   /** `at` backdates the log; defaults to now. Ignores non-integer season/episodes. */
   const toggleEpisode = useCallback((id: number, s: number, e: number, at?: number) => {
+    if (!status.hydrated) return
     if (!Number.isInteger(id) || !Number.isInteger(s) || !Number.isInteger(e) || s < 0 || e < 0) return
     const key = entryKey('tv', id)
     const entry = cache[key]
@@ -544,51 +528,29 @@ export function useLibrary(subscribeToStore = true) {
     const stamp = isValidTimestamp(at) ? at : Date.now()
     const episodes = { ...(entry.rewatching ? entry.rewatchEpisodes : entry.episodes) }
     if (Object.prototype.hasOwnProperty.call(episodes, k)) delete episodes[k]
-    else episodes[k] = Number.isFinite(stamp) ? stamp : Date.now()
-    if (entry.rewatching) {
-      const cycle = advanceRewatch(entry, episodes, entry.totalEpisodes)
-      const updated = { ...entry, ...cycle }
-      commit({ ...cache, [key]: updated }, { [key]: updated })
-      return
-    }
-    const watched = Object.keys(episodes).length
-    const status = statusAfterEpisodeProgress(currentSettings().autoCompleteSeries, watched, entry.totalEpisodes)
-    const finished = status === 'watched'
-    const watchedAt = watchedAtAfterProgress(entry.status, finished, entry.watchedAt, maxTime(Object.values(episodes)))
-    const updated = { ...entry, episodes, status, watchedAt }
-    commit({ ...cache, [key]: updated }, { [key]: updated })
+    else episodes[k] = stamp
+    commitEpisodeLog(key, entry, episodes)
   }, [])
 
-  const setSeasonWatched = useCallback(
-    (id: number, s: number, numbers: number[], watched: boolean, at?: number) => {
+  const setSeasonWatched = useCallback((id: number, s: number, numbers: number[], watched: boolean, at?: number) => {
+    if (!status.hydrated) return
     if (!Number.isInteger(id) || !Number.isInteger(s) || s < 0 || !Array.isArray(numbers)) return
     const key = entryKey('tv', id)
     const entry = cache[key]
     if (!entry) return
     if (entry.status === 'watched' && !entry.rewatching) return
     const episodes = { ...(entry.rewatching ? entry.rewatchEpisodes : entry.episodes) }
+    const stamp = isValidTimestamp(at) ? at : Date.now()
     for (const n of numbers) {
       if (!Number.isInteger(n) || n < 0) continue
-      if (watched) episodes[epKey(s, n)] = episodes[epKey(s, n)] ?? (isValidTimestamp(at) ? at : Date.now())
+      if (watched) episodes[epKey(s, n)] = episodes[epKey(s, n)] ?? stamp
       else delete episodes[epKey(s, n)]
     }
-    if (entry.rewatching) {
-      const cycle = advanceRewatch(entry, episodes, entry.totalEpisodes)
-      const updated = { ...entry, ...cycle }
-      commit({ ...cache, [key]: updated }, { [key]: updated })
-      return
-    }
-    const count = Object.keys(episodes).length
-    const status = statusAfterEpisodeProgress(currentSettings().autoCompleteSeries, count, entry.totalEpisodes)
-    const finished = status === 'watched'
-    const watchedAt = watchedAtAfterProgress(entry.status, finished, entry.watchedAt, maxTime(Object.values(episodes)))
-    const updated = { ...entry, episodes, status, watchedAt }
-    commit({ ...cache, [key]: updated }, { [key]: updated })
-    },
-    [],
-  )
+    commitEpisodeLog(key, entry, episodes)
+  }, [])
 
   const setRewatching = useCallback((id: number, rewatching: boolean) => {
+    if (!status.hydrated) return
     const key = entryKey('tv', id)
     const entry = cache[key]
     if (!entry || entry.mediaType !== 'tv' || entry.status !== 'watched') return
@@ -598,22 +560,22 @@ export function useLibrary(subscribeToStore = true) {
 
   /** Log an additional watch-through at `at` (defaults to now). Capped at MAX_REWATCHES. */
   const addRewatch = useCallback((type: MediaType, id: number, at?: number) => {
+    if (!status.hydrated) return
     const key = entryKey(type, id)
     const entry = cache[key]
     if (!entry || !canLogRewatch(entry)) return
     const stamp = at ?? Date.now()
     if (!isValidTimestamp(stamp)) return
-    const rewatches = appendRewatchStamp(entry.rewatches ?? [], stamp)
-    const updated = { ...entry, rewatches }
+    const updated = { ...entry, rewatches: appendRewatchStamp(entry.rewatches, stamp) }
     commit({ ...cache, [key]: updated }, { [key]: updated })
   }, [])
 
   /** Rewrite one logged rewatch date by its index. */
   const setRewatchDate = useCallback((type: MediaType, id: number, index: number, at: number) => {
-    if (!isValidTimestamp(at)) return
+    if (!status.hydrated || !isValidTimestamp(at)) return
     const key = entryKey(type, id)
     const entry = cache[key]
-    if (!entry?.rewatches || !Number.isInteger(index) || index < 0 || index >= entry.rewatches.length) return
+    if (!entry || !Number.isInteger(index) || index < 0 || index >= entry.rewatches.length) return
     const rewatches = [...entry.rewatches]
     rewatches[index] = at
     rewatches.sort((a, b) => a - b)
@@ -622,24 +584,56 @@ export function useLibrary(subscribeToStore = true) {
   }, [])
 
   const removeRewatch = useCallback((type: MediaType, id: number, index: number) => {
+    if (!status.hydrated) return
     const key = entryKey(type, id)
     const entry = cache[key]
-    if (!entry?.rewatches) return
-    const rewatches = entry.rewatches.filter((_, i) => i !== index)
-    const updated = { ...entry, rewatches }
+    if (!entry) return
+    const updated = { ...entry, rewatches: entry.rewatches.filter((_, i) => i !== index) }
     commit({ ...cache, [key]: updated }, { [key]: updated })
   }, [])
 
-  const clear = useCallback(() => {
+  /** Erase the whole shelf. Returns the erased records so the caller can offer undo. */
+  const clear = useCallback((): Entry[] => {
+    if (!status.hydrated) return []
+    const erased = Object.values(cache)
     commit({}, Object.fromEntries(Object.keys(cache).map((key) => [key, null])), true)
+    return erased
   }, [])
-  const replaceAll = useCallback((next: Record<string, Entry>) => commit(sanitizeMap(next)), [])
+
+  /** Replace the whole shelf with `next` (used by undo-erase and tests). */
+  const replaceAll = useCallback((next: Record<string, Entry>) => {
+    if (!status.hydrated) return
+    commit(sanitizeMap(next))
+  }, [])
+
+  /** Merge imported records into the live shelf; only the touched keys are saved. */
+  const importEntries = useCallback((incoming: readonly Entry[]) => {
+    if (!status.hydrated) return { imported: 0, combined: 0 }
+    const next = { ...cache }
+    const changes: Record<string, Entry> = {}
+    let imported = 0
+    let combined = 0
+    for (const entry of incoming) {
+      const key = entryKey(entry.mediaType, entry.id)
+      const current = next[key]
+      const merged = current ? mergeImportedEntry(current, entry) : entry
+      if (current) combined++
+      else imported++
+      if (JSON.stringify(current) !== JSON.stringify(merged)) {
+        next[key] = merged
+        changes[key] = merged
+      }
+    }
+    if (Object.keys(changes).length > 0) commit(next, changes)
+    return { imported, combined }
+  }, [])
 
   return {
     entries,
     get,
     upsert,
     remove,
+    restore,
     toggleEpisode,
     setSeasonWatched,
     setRewatching,
@@ -647,36 +641,54 @@ export function useLibrary(subscribeToStore = true) {
     setRewatchDate,
     removeRewatch,
     replaceAll,
+    importEntries,
     clear,
   }
 }
 
-/** Preserve the previous browser store's values on collisions, fill missing
- * fields from SQLite, and combine progress during the one-time migration. */
-function mergeMigratedEntry(legacy: Entry, database: Entry): Entry {
-  const rewatches = mergeTimestampHistory(legacy.rewatches, database.rewatches)
-  return {
-    ...database,
-    ...legacy,
-    episodes: { ...database.episodes, ...legacy.episodes },
-    rewatchEpisodes: { ...database.rewatchEpisodes, ...legacy.rewatchEpisodes },
-    rewatching: legacy.rewatching || database.rewatching,
-    rewatches,
-    rating: legacy.rating ?? database.rating,
-    favorite: legacy.favorite || database.favorite,
-    watchedAt: legacy.watchedAt ?? database.watchedAt,
-    runtime: legacy.runtime ?? database.runtime,
-    totalEpisodes: legacy.totalEpisodes ?? database.totalEpisodes,
-    poster: legacy.poster ?? database.poster,
-    customPoster: legacy.customPoster ?? database.customPoster ?? null,
-    backdrop: legacy.backdrop ?? database.backdrop,
-    title: legacy.title || database.title,
-    year: legacy.year || database.year,
-    addedAt: Math.min(legacy.addedAt, database.addedAt),
+/** Apply an edited episode log, moving status/completion along with it. */
+function commitEpisodeLog(key: string, entry: Entry, episodes: Record<string, number>) {
+  let updated: Entry
+  if (entry.rewatching) {
+    updated = { ...entry, ...advanceRewatch(entry, episodes, entry.totalEpisodes) }
+  } else {
+    const status = statusAfterEpisodeProgress(currentSettings().autoCompleteSeries, Object.keys(episodes).length, entry.totalEpisodes)
+    const watchedAt = watchedAtAfterProgress(entry.status, status === 'watched', entry.watchedAt, maxTime(Object.values(episodes)))
+    updated = { ...entry, episodes, status, watchedAt }
   }
+  commit({ ...cache, [key]: updated }, { [key]: updated })
 }
 
-export type ImportResult = { merged: Record<string, Entry>; imported: number; skipped: number; combined: number }
+export type ImportResult = {
+  /** Valid records from the file, normalized (pass to `importEntries`). */
+  entries: Entry[]
+  /** Preview of the shelf after merging into `existing`. */
+  merged: Record<string, Entry>
+  imported: number
+  skipped: number
+  combined: number
+  /** Settings carried by a full backup file; absent for plain shelf exports. */
+  settings: Record<string, unknown> | null
+}
+
+/** Identifies CineTrack backup files; bare arrays are the original export format. */
+export const BACKUP_FORMAT = 'cinetrack-backup'
+export const BACKUP_VERSION = 2
+
+/** Serialize the shelf (and optionally settings) into a versioned backup document. */
+export function buildBackup(entries: readonly Entry[], settings?: Record<string, unknown>): string {
+  return JSON.stringify(
+    {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      library: entries,
+      ...(settings ? { settings } : {}),
+    },
+    null,
+    2,
+  )
+}
 
 /** Keep existing curated fields on collisions; imports can contribute missing
  * metadata and viewing progress without erasing the current library. */
@@ -704,47 +716,56 @@ function mergeImportedEntry(existing: Entry, incoming: Entry): Entry {
 }
 
 /** Validate a library JSON file and merge it without replacing curated data. */
-export function parseLibraryImport(text: string, existing: Entry[]): ImportResult {
-  if (text.length > MAX_LIBRARY_FILE_BYTES) throw new Error('File too large — max 80 MB.')
+export function parseLibraryImport(text: string, existing: readonly Entry[]): ImportResult {
+  if (text.length > MAX_LIBRARY_FILE_BYTES) throw new Error('File too large — the maximum is 80 MB.')
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
     throw new Error('Not a CineTrack JSON export — file could not be read.')
   }
-  if (!Array.isArray(parsed)) throw new Error('Not a CineTrack JSON export — expected a list of titles.')
-  if (parsed.length > 5000) throw new Error('Too many entries — max 5000 titles per import.')
+  let list: unknown = parsed
+  let settings: Record<string, unknown> | null = null
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const doc = parsed as Record<string, unknown>
+    if (doc.format !== BACKUP_FORMAT) throw new Error('Not a CineTrack JSON export — expected a list of titles.')
+    if (typeof doc.version !== 'number' || doc.version > BACKUP_VERSION) {
+      throw new Error('This backup was made by a newer version of CineTrack.')
+    }
+    list = doc.library
+    if (doc.settings && typeof doc.settings === 'object' && !Array.isArray(doc.settings)) {
+      settings = doc.settings as Record<string, unknown>
+    }
+  }
+  if (!Array.isArray(list)) throw new Error('Not a CineTrack JSON export — expected a list of titles.')
+  if (list.length > MAX_IMPORT_ENTRIES) {
+    throw new Error(`Too many entries — max ${MAX_IMPORT_ENTRIES.toLocaleString('en-US')} titles per import.`)
+  }
   const merged: Record<string, Entry> = {}
-  for (const entry of existing) merged[`${entry.mediaType}:${entry.id}`] = entry
+  for (const entry of existing) merged[entryKey(entry.mediaType, entry.id)] = entry
+  const entries: Entry[] = []
   let imported = 0
   let skipped = 0
   let combined = 0
-  for (const raw of parsed) {
-    const entry = raw as Partial<Entry>
-    if (!Number.isSafeInteger(entry?.id) || (entry?.id as number) <= 0 || (entry?.mediaType !== 'movie' && entry?.mediaType !== 'tv')) {
+  for (const raw of list) {
+    const candidate = raw as Partial<Entry> | null
+    const key = candidate && typeof candidate === 'object' ? `${candidate.mediaType}:${candidate.id}` : ''
+    const incoming = normalizeKeyedEntry(key, candidate)
+    if (!incoming) {
       skipped++
       continue
     }
-    try {
-      const key = `${entry.mediaType}:${entry.id}`
-      if (!isSafeKey(key)) {
-        skipped++
-        continue
-      }
-      const incoming = normalizeEntry(entry as Entry)
-      const current = merged[key]
-      if (current) {
-        merged[key] = mergeImportedEntry(current, incoming)
-        combined++
-      } else {
-        merged[key] = incoming
-        imported++
-      }
-    } catch {
-      skipped++
+    entries.push(incoming)
+    const current = merged[key]
+    if (current) {
+      merged[key] = mergeImportedEntry(current, incoming)
+      combined++
+    } else {
+      merged[key] = incoming
+      imported++
     }
   }
-  return { merged, imported, skipped, combined }
+  return { entries, merged, imported, skipped, combined, settings }
 }
 
 /* ---------- date helpers ---------- */
@@ -799,9 +820,7 @@ function maxTime(times: readonly unknown[]): number | null {
   return max
 }
 
-function validStamp(at: unknown): at is number {
-  return isValidTimestamp(at)
-}
+const validStamp = isValidTimestamp
 
 export function progress(e: Entry) {
   if (e.mediaType === 'movie') return e.watchedAt != null && validStamp(e.watchedAt) ? 1 : 0
@@ -876,10 +895,12 @@ export function minutesWatched(entries: Entry[]) {
   }, 0)
 }
 
-/** Consistent short date for ledger microcopy (en-GB: "05 Sept"). */
-export function formatDayMonth(at: number) {
+/** Consistent short date for ledger microcopy ("05 Sept"; "05 Sept 2024" for other years). */
+export function formatDayMonth(at: number, now = Date.now()) {
   if (!isValidTimestamp(at)) return 'Unknown date'
-  return new Date(at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })
+  const date = new Date(at)
+  const sameYear = date.getFullYear() === new Date(now).getFullYear()
+  return date.toLocaleDateString('en-GB', sameYear ? { day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 /** Friendly relative date for the ledger ("Today", "3d ago"); falls back to
@@ -945,28 +966,6 @@ export function recentCompletions(entries: Entry[], limit?: number): Activity[] 
   }
   events.sort((a, b) => b.at - a.at)
   return limit == null ? events : events.slice(0, limit)
-}
-
-export function recentActivity(entries: Entry[], limit = 12): Activity[] {
-  const events: Activity[] = []
-  for (const e of entries) {
-    if (e.mediaType === 'movie' && validStamp(e.watchedAt)) {
-      events.push({ entry: e, at: e.watchedAt, label: 'Film' })
-    } else {
-      for (const [k, at] of Object.entries(e.episodes ?? {})) {
-        const parts = k.split('-')
-        if (parts.length !== 2) continue
-        const [s, ep] = parts as [string, string]
-        if (!/^\d+$/.test(s) || !/^\d+$/.test(ep) || !validStamp(at)) continue
-        events.push({ entry: e, at, label: `S${s.padStart(2, '0')}E${ep.padStart(2, '0')}` })
-      }
-    }
-    // Rewatches are logged viewings too — fold them into the ledger and charts.
-    for (const at of e.rewatches ?? []) {
-      if (validStamp(at)) events.push({ entry: e, at, label: 'Rewatch' })
-    }
-  }
-  return events.sort((a, b) => b.at - a.at).slice(0, limit)
 }
 
 /** Completed titles per calendar month for the trailing `months` window —

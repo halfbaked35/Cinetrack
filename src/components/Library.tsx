@@ -1,9 +1,41 @@
 import { createPortal } from 'react-dom'
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { type MediaType, type TmdbTitle } from '../lib/tmdb'
-import { lastActivityAt, useLibrary, type Entry, type Status } from '../lib/library'
+import { lastActivityAt, useLibrary, useLibraryStatus, type Entry, type Status } from '../lib/library'
 import { useSettings } from '../lib/settings'
-import { Chip, Empty, Poster, PosterGrid, SearchInput, SectionHead, STATUS_INACTIVE, STATUS_STYLE } from './ui'
+import { Chip, Empty, Poster, PosterGrid, PosterSkeleton, SearchInput, SectionHead, STATUS_INACTIVE, STATUS_STYLE } from './ui'
+
+/** Stable TMDb-shaped view of each entry, so memoised posters skip re-rendering. */
+const itemCache = new WeakMap<Entry, TmdbTitle>()
+function itemFor(entry: Entry): TmdbTitle {
+  let item = itemCache.get(entry)
+  if (!item) {
+    item = {
+      id: entry.id,
+      media_type: entry.mediaType,
+      title: entry.mediaType === 'movie' ? entry.title : undefined,
+      name: entry.mediaType === 'tv' ? entry.title : undefined,
+      poster_path: entry.poster,
+      backdrop_path: entry.backdrop,
+      overview: '',
+      vote_average: 0,
+      release_date: entry.year,
+    }
+    itemCache.set(entry, item)
+  }
+  return item
+}
+
+const FILTER_LABEL: Record<ShelfFilter, string> = {
+  all: 'All',
+  watching: 'Watching',
+  planned: 'Planned',
+  watched: 'Watched',
+  rewatching: 'Rewatching',
+  rewatched: 'Rewatched',
+  seen: 'Seen',
+  dropped: 'Dropped',
+}
 
 type Tab = 'all' | 'movie' | 'tv' | 'favorites'
 type ShelfFilter = Status | 'rewatching' | 'rewatched' | 'all' | 'seen'
@@ -54,7 +86,7 @@ export function applyShelfFilters(
   const statusOrder: Record<Status, number> = { planned: 0, watching: 1, watched: 2, dropped: 3 }
   const statusFor = (entry: Entry): Status => entry.mediaType === 'movie' && entry.status === 'dropped' ? 'planned' : entry.status
   sorted.sort((a, b) => {
-    if (opts.sort === 'title') return a.title.localeCompare(b.title)
+    if (opts.sort === 'title') return a.title.localeCompare(b.title, undefined, { sensitivity: 'base', numeric: true })
     if (opts.sort === 'rating') return (b.rating ?? -1) - (a.rating ?? -1)
     if (opts.sort === 'year') return (Number(b.year) || 0) - (Number(a.year) || 0)
     if (opts.sort === 'lastWatched') return (lastActivityAt(b) ?? -1) - (lastActivityAt(a) ?? -1)
@@ -71,7 +103,8 @@ export default function Library({
   onOpen: (t: MediaType, id: number, seed?: TmdbTitle) => void
   initialView?: LibraryView | null
 }) {
-  const { entries, get } = useLibrary()
+  const { entries } = useLibrary()
+  const { hydrated } = useLibraryStatus()
   const { settings } = useSettings()
   const [tab, setTab] = useState<Tab>(() => initialView?.tab ?? settings.defaultShelfTab)
   const [filter, setFilter] = useState<ShelfFilter>(() => initialView?.filter ?? 'all')
@@ -86,9 +119,10 @@ export default function Library({
     setQ('')
   }, [initialView, settings.defaultShelfTab])
 
+  // Saved preferences can arrive after the first render (deep link to #library).
   useEffect(() => {
-    if (tab === 'movie' && filter === 'dropped') setFilter('all')
-  }, [tab, filter])
+    setSort(settings.defaultSort)
+  }, [settings.defaultSort])
 
   const pool = useMemo(() => {
     if (tab === 'favorites') return entries.filter((e) => e.favorite)
@@ -103,10 +137,14 @@ export default function Library({
     [pool, filter, minRating, deferredQ, sort],
   )
 
-  const [page, setPage] = useState(1)
   const PAGE_SIZE = 40
+  // Paging resets whenever the query changes; keying it on the query avoids a
+  // render with a stale page count.
+  const queryKey = `${tab}|${filter}|${minRating}|${deferredQ}|${sort}`
+  const [paging, setPaging] = useState({ key: queryKey, page: 1 })
+  const page = paging.key === queryKey ? paging.page : 1
+  const setPage = (update: (p: number) => number) => setPaging({ key: queryKey, page: update(page) })
   const paged = useMemo(() => shown.slice(0, page * PAGE_SIZE), [shown, page])
-  useEffect(() => setPage(1), [tab, filter, minRating, deferredQ, sort])
 
   // Infinite scroll: observe a sentinel element near the bottom
   const loadMoreRef = useRef<() => void>(() => {})
@@ -146,6 +184,7 @@ export default function Library({
               active={tab === t.id}
               onClick={() => {
                 setTab(t.id)
+                // Films have no Dropped state.
                 if (t.id === 'movie' && filter === 'dropped') setFilter('all')
               }}
             >
@@ -164,11 +203,21 @@ export default function Library({
             onSort={setSort}
             onMinRating={setMinRating}
           />
-          <SearchInput value={q} onChange={setQ} className="w-64 md:w-96" />
+          <SearchInput value={q} onChange={setQ} label="Search your shelf" placeholder="Search your shelf…" className="w-full sm:w-64 md:w-96" />
         </div>
       </div>
 
-      {entries.length === 0 ? (
+      <p className="sr-only" role="status" aria-live="polite">
+        {hydrated ? `${shown.length} title${shown.length === 1 ? '' : 's'} shown` : 'Loading your shelf'}
+      </p>
+
+      {!hydrated ? (
+        <PosterGrid columns={settings.libraryColumns}>
+          {Array.from({ length: 12 }, (_, i) => (
+            <PosterSkeleton key={i} />
+          ))}
+        </PosterGrid>
+      ) : entries.length === 0 ? (
         <div className="space-y-3 text-center">
           <Empty>No titles on this shelf yet</Empty>
           <a
@@ -180,9 +229,17 @@ export default function Library({
         </div>
       ) : shown.length === 0 ? (
         <div className="space-y-3">
-          <Empty>No matches for current filters</Empty>
+          <Empty>
+            {tab === 'favorites' && pool.length === 0
+              ? 'No favourites yet — mark one with the heart on a title page'
+              : deferredQ.trim()
+                ? `Nothing on your shelf matches “${deferredQ.trim()}”`
+                : 'No titles match these filters'}
+          </Empty>
           <button
+            type="button"
             onClick={() => {
+              setTab('all')
               setFilter('all')
               setSort(settings.defaultSort)
               setMinRating(0)
@@ -197,23 +254,7 @@ export default function Library({
         <>
           <PosterGrid columns={settings.libraryColumns}>
             {paged.map((e) => (
-              <Poster
-                key={`${e.mediaType}-${e.id}`}
-                item={
-                  {
-                    id: e.id,
-                    media_type: e.mediaType,
-                    title: e.title,
-                    poster_path: e.poster,
-                    backdrop_path: e.backdrop,
-                    overview: '',
-                    vote_average: 0,
-                    release_date: e.year,
-                  } as TmdbTitle
-                }
-                entry={get(e.mediaType, e.id)}
-                onOpen={onOpen}
-              />
+              <Poster key={`${e.mediaType}-${e.id}`} item={itemFor(e)} entry={e} onOpen={onOpen} />
             ))}
           </PosterGrid>
           {paged.length < shown.length && <div ref={setSentinel} className="h-px" aria-hidden />}
@@ -335,6 +376,18 @@ function FilterBar({
       role="dialog"
       aria-label="Filter shelf"
       style={popoverStyle}
+      onKeyDown={(e) => {
+        // The popover is portaled to <body>; send Tab back into page order
+        // (to the trigger) instead of letting focus fall off the document.
+        if (e.key !== 'Tab') return
+        const focusables = Array.from(boxRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? [])
+        const atEdge = e.shiftKey ? document.activeElement === focusables[0] : document.activeElement === focusables[focusables.length - 1]
+        if (atEdge) {
+          e.preventDefault()
+          setOpen(false)
+          triggerRef.current?.focus()
+        }
+      }}
       className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute z-30 max-h-[min(70vh,520px)] w-[300px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[0_12px_40px_rgba(0,0,0,0.22)]"
     >
       <div className="rule-label mb-3 border-b border-border pb-2">
@@ -362,40 +415,36 @@ function FilterBar({
             <button
               key={f}
               type="button"
-              onClick={() => {
-                onFilter(f)
-                setOpen(false)
-                triggerRef.current?.focus()
-              }}
+              onClick={() => onFilter(f)}
               aria-pressed={isActive}
               className={`press shrink-0 whitespace-nowrap border px-3 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.14em] ${isActive ? activeStyle : inactiveStyle}`}
             >
-              {f}
+              {FILTER_LABEL[f]}
             </button>
           )
         })}
       </FilterGroup>
       <FilterGroup label="Order">
         {SORTS.map((s) => (
-          <Chip key={s.id} active={sort === s.id} onClick={() => { onSort(s.id); setOpen(false); triggerRef.current?.focus(); }}>
+          <Chip key={s.id} active={sort === s.id} onClick={() => onSort(s.id)}>
             {s.label}
           </Chip>
         ))}
       </FilterGroup>
       <FilterGroup label="Minimum rating">
         {RATING_OPTIONS.map((r) => (
-          <Chip key={r.id} active={minRating === r.id} onClick={() => { onMinRating(r.id); setOpen(false); triggerRef.current?.focus(); }}>
+          <Chip key={r.id} active={minRating === r.id} onClick={() => onMinRating(r.id)}>
             {r.label}
           </Chip>
         ))}
       </FilterGroup>
       {active && (
         <button
+          type="button"
           onClick={() => {
             onFilter('all')
             onSort(settings.defaultSort)
             onMinRating(0)
-            setOpen(false)
             triggerRef.current?.focus()
           }}
           className="press mt-1 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground underline underline-offset-4 hover:text-[var(--primary)]"

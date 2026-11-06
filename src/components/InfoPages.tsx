@@ -1,15 +1,16 @@
+import type { InfoSlug } from '../lib/route'
 import { SectionHead } from './ui'
 
-export type InfoSlug = 'privacy' | 'api' | 'about' | 'terms'
+export type { InfoSlug } from '../lib/route'
 
-export const INFO_LINKS: { slug: InfoSlug; label: string }[] = [
+const INFO_LINKS: { slug: InfoSlug; label: string }[] = [
   { slug: 'about', label: 'About' },
   { slug: 'privacy', label: 'Privacy Policy' },
   { slug: 'api', label: 'API Information' },
   { slug: 'terms', label: 'Terms' },
 ]
 
-const LAST_UPDATED = 'September 2026'
+const LAST_UPDATED = 'November 2026'
 
 /** Long-form informational pages linked from the footer. */
 export default function InfoPage({ slug, onBack }: { slug: InfoSlug; onBack: () => void }) {
@@ -23,6 +24,7 @@ export default function InfoPage({ slug, onBack }: { slug: InfoSlug; onBack: () 
         headingLevel={1}
         right={
           <button
+            type="button"
             onClick={onBack}
             className="press border border-border px-4 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] hover:border-[var(--foreground)] hover:bg-card"
           >
@@ -41,7 +43,7 @@ export default function InfoPage({ slug, onBack }: { slug: InfoSlug; onBack: () 
 }
 
 function H({ children }: { children: React.ReactNode }) {
-  return <h3 className="font-display text-[22px] leading-tight text-foreground">{children}</h3>
+  return <h2 className="font-display text-[22px] leading-tight text-foreground">{children}</h2>
 }
 
 function About() {
@@ -79,15 +81,19 @@ function Privacy() {
       </p>
       <H>Third-party requests</H>
       <p>
-        Title metadata, posters, and stills are retrieved via the local backend proxy from The Movie Database (themoviedb.org).
-        Those upstream requests are subject to TMDb&rsquo;s own privacy policy. We do not run analytics, advertising, or
-        third-party trackers.
+        Title metadata (search results, details, cast, and episodes) is fetched from The Movie Database (themoviedb.org)
+        through the local server, so TMDb sees the server&rsquo;s requests rather than your browser&rsquo;s. Posters and
+        stills load directly from TMDb&rsquo;s image servers (image.tmdb.org), which can see your IP address; no referrer
+        is sent with those requests. Both are subject to TMDb&rsquo;s own privacy policy.
+      </p>
+      <p>
+        Fonts are bundled with the app. CineTrack runs no analytics, advertising, or third-party trackers.
       </p>
       <H>Cookies</H>
       <p>CineTrack sets no cookies. Your shelf and preferences are stored locally on your device.</p>
       <H>Your control</H>
       <p>
-        You may export or erase your entire shelf from Settings at any time.
+        You can export a full backup, restore one, or erase your entire shelf from Settings at any time.
       </p>
     </>
   )

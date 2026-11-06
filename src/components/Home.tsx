@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { img, type MediaType, type TmdbTitle } from '../lib/tmdb'
-import { countRewatches, formatDayMonth, formatRelativeDay, minutesWatched, progress, recentCompletions, useLibrary, watchedCount } from '../lib/library'
+import { countRewatches, formatDayMonth, formatRelativeDay, minutesWatched, progress, recentCompletions, useLibrary, useLibraryStatus, watchedCount, type Entry } from '../lib/library'
 import { useSettings } from '../lib/settings'
 import type { LibraryView } from './Library'
 import { CloseButton, Empty, PosterTilt, PosterTiltInline, SectionHead, ShuffleIcon, Stat, useBodyScrollLock, useFocusTrap } from './ui'
@@ -57,6 +57,7 @@ export default function Home({
   onLibraryNavigate: (view: LibraryView) => void
 }) {
   const { entries } = useLibrary()
+  const { hydrated } = useLibraryStatus()
   const { settings } = useSettings()
 
   const stats = useMemo(() => {
@@ -75,7 +76,6 @@ export default function Home({
       showsSeen,
       showsTotal: shows.length,
       hours: Math.round(mins / 60),
-      days: (mins / 1440).toFixed(1),
       avg: rated.length ? (rated.reduce((s, e) => s + (e.rating ?? 0), 0) / rated.length).toFixed(1) : '—',
       inProgress: entries.filter((e) => e.status === 'watching' || (e.mediaType === 'tv' && e.rewatching)),
       planned: entries.filter((e) => e.status === 'planned'),
@@ -88,9 +88,19 @@ export default function Home({
 
   const [shuffleKey, setShuffleKey] = useState(0)
   const [activityOpen, setActivityOpen] = useState(false)
+  // Re-deal only when the set of planned titles changes or on Shuffle — not
+  // on every unrelated edit (ticking an episode used to reshuffle the picks).
+  const plannedSignature = stats.planned.map((e) => `${e.mediaType}:${e.id}`).sort().join(',')
+  const [picks, setPicks] = useState<{ key: string; ids: string[] }>({ key: '', ids: [] })
+  const pickKey = `${plannedSignature}#${shuffleKey}`
+  useEffect(() => {
+    setPicks({ key: pickKey, ids: pickDiverse(stats.planned, 3).map((e) => `${e.mediaType}:${e.id}`) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-deal on the signature, not on array identity
+  }, [pickKey])
   const suggestions = useMemo(() => {
-    return pickDiverse(stats.planned, 3)
-  }, [stats.planned, shuffleKey])
+    const byKey = new Map(stats.planned.map((e) => [`${e.mediaType}:${e.id}`, e]))
+    return picks.ids.map((key) => byKey.get(key)).filter((e): e is Entry => !!e)
+  }, [picks, stats.planned])
 
   return (
     <div className="space-y-16">
@@ -113,13 +123,29 @@ export default function Home({
       </section>
 
       <section>
-        <SectionHead title="Currently in progress" note="Series, films, and rewatches left mid-viewing." rule={false} />
-        {stats.inProgress.length === 0 ? (
+        <SectionHead
+          title="Currently in progress"
+          note="Series, films, and rewatches left mid-viewing."
+          rule={false}
+          right={stats.inProgress.length > 2 ? (
+            <button
+              type="button"
+              onClick={() => onLibraryNavigate({ tab: 'all', filter: 'watching' })}
+              className="press inline-flex py-2 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-[var(--primary)]"
+            >
+              See all {stats.inProgress.length}
+            </button>
+          ) : undefined}
+        />
+        {!hydrated ? (
+          <div className="h-[130px] border border-border bg-card shimmer" aria-hidden="true" />
+        ) : stats.inProgress.length === 0 ? (
           <Empty>Nothing underway — visit Discover to begin a title</Empty>
         ) : (
           <div className="grid gap-px border border-border bg-border md:grid-cols-2">
             {stats.inProgress.slice(0, 2).map((e, i) => (
               <button
+                type="button"
                 key={`${e.mediaType}-${e.id}`}
                 onClick={() => onOpen(e.mediaType, e.id)}
                 style={{ animationDelay: `${i * 55}ms` }}
@@ -181,19 +207,23 @@ export default function Home({
               <button
                 type="button"
                 onClick={() => setActivityOpen(true)}
-                className="press inline-flex py-2 font-sans text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-[var(--primary)]"
+                aria-haspopup="dialog"
+                className="press inline-flex py-2 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-[var(--primary)]"
               >
                 See all activity
               </button>
             ) : undefined}
           />
-          {activity.length === 0 ? (
+          {!hydrated ? (
+            <div className="h-[260px] border-y border-border shimmer" aria-hidden="true" />
+          ) : activity.length === 0 ? (
             <Empty>No viewings recorded</Empty>
           ) : (
             <ol className="divide-y divide-border border-y border-border">
               {activity.map((a, i) => (
-                <li key={`${a.entry.id}-${a.at}-${i}`} className="animate-rise" style={{ animationDelay: `${i * 40}ms` }}>
+                <li key={`${a.entry.mediaType}-${a.entry.id}-${a.label}-${a.at}`} className="animate-rise" style={{ animationDelay: `${i * 40}ms` }}>
                   <button
+                    type="button"
                     onClick={() => onOpen(a.entry.mediaType, a.entry.id)}
                     className="group flex w-full items-baseline gap-4 py-[12.5px] text-left transition-colors duration-200 hover:text-[var(--primary)]"
                   >
@@ -202,9 +232,9 @@ export default function Home({
                     </span>
                     <span className="flex shrink-0 items-baseline gap-3 transition-transform duration-300 group-hover:-translate-x-1 sm:gap-5">
                       <span className="font-sans text-[10px] text-[var(--accent)]">{a.label}</span>
-                      <span className="min-w-[3.5rem] text-right font-sans text-[10px] tabular-nums text-muted-foreground">
+                      <time dateTime={new Date(a.at).toISOString()} className="min-w-[3.5rem] text-right font-sans text-[10px] tabular-nums text-muted-foreground">
                         {settings.dateStyle === 'relative' ? formatRelativeDay(a.at) : formatDayMonth(a.at)}
-                      </span>
+                      </time>
                     </span>
                   </button>
                 </li>
@@ -216,11 +246,12 @@ export default function Home({
         <div className="flex min-w-0 flex-col">
           <SectionHead
             title="Feeling lucky?"
-            note="Three random picks from your shelf."
+            note="Three random picks from your watchlist."
             rule={false}
             right={
               stats.planned.length > 3 ? (
                 <button
+                  type="button"
                   onClick={() => setShuffleKey((k) => k + 1)}
                   aria-label="Shuffle recommendations"
                   className="press relative z-50 inline-flex items-center gap-2 border border-border bg-background px-3.5 py-2 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:border-[var(--primary)] hover:text-[var(--primary)]"
@@ -230,7 +261,9 @@ export default function Home({
               ) : undefined
             }
           />
-          {stats.planned.length === 0 ? (
+          {!hydrated ? (
+            <div className="min-h-40 border border-border bg-card shimmer" aria-hidden="true" />
+          ) : stats.planned.length === 0 ? (
             <div className="flex min-h-40 items-center gap-5 border border-dashed border-border px-6 py-8">
               <span aria-hidden className="font-display text-4xl italic text-[var(--primary)]">∅</span>
               <p className="max-w-[34ch] text-[13px] leading-relaxed text-muted-foreground">
@@ -245,13 +278,14 @@ export default function Home({
               <div className="grid grid-cols-3 items-start gap-3 sm:gap-4 xl:gap-4">
                 {suggestions.map((e, i) => (
                   <PosterTilt
-                    key={`${e.mediaType}-${e.id}-${shuffleKey}-${i}`}
+                    key={`${e.mediaType}-${e.id}-${shuffleKey}`}
                     style={{ animationDelay: `${i * 60}ms` }}
                     className="mx-auto w-full max-w-[300px] animate-plate-fade"
                   >
                     <button
+                      type="button"
                       onClick={() => onOpen(e.mediaType, e.id)}
-                      aria-label={`Open ${e.title}`}
+                      aria-label={`${e.title}${e.year ? ` (${e.year})` : ''}`}
                       className="group flex w-full flex-col text-left"
                     >
                       <span data-poster-surface className="poster-card-3d__art relative block aspect-[2/3] w-full overflow-hidden bg-card">
@@ -276,7 +310,7 @@ export default function Home({
                 ))}
               </div>
               <div className="mt-4 flex items-center justify-between border-t border-border pt-3 rule-label">
-                <span>{stats.planned.length} titles on your shelf</span>
+                <span>{stats.planned.length} {stats.planned.length === 1 ? 'title' : 'titles'} planned</span>
                 <span><span className="text-[var(--primary)]">{String(suggestions.length).padStart(2, '0')}</span> selected</span>
               </div>
             </>
@@ -309,7 +343,7 @@ export default function Home({
         </Suspense>
       </div>
 
-      {!hasData && (
+      {hydrated && !hasData && (
         <p className="border-t border-border pt-6 text-[13px] leading-relaxed text-muted-foreground">
           Your archive is empty. Head to{' '}
           <a href="#discover" className="font-medium text-foreground underline underline-offset-4 hover:text-[var(--primary)]">

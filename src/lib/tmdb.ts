@@ -1,8 +1,10 @@
 import { currentSettings, LANGUAGES } from './settings'
+import { isSafeImagePath, type MediaType } from './entry'
+
+export { isSafeImagePath } from './entry'
+export type { MediaType } from './entry'
 
 const BASE = '/api/tmdb'
-
-export type MediaType = 'movie' | 'tv'
 
 export type TmdbTitle = {
   id: number
@@ -67,7 +69,7 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function safeImagePath(value: unknown): string | null {
-  return typeof value === 'string' && /^\/[A-Za-z0-9/_\-.]+$/.test(value) && !value.includes('..') ? value : null
+  return isSafeImagePath(value) ? value : null
 }
 
 function normalizeTitle(value: unknown): TmdbTitle | null {
@@ -328,19 +330,8 @@ export async function tmdb<T>(  path: string,
  *  characters only, hard-capped, before it can reach an Error message/toast. */
 function sanitizeUpstreamText(value: unknown, max = 300): string | undefined {
   if (typeof value !== 'string') return undefined
-  const cleaned = value.replace(/[-\u001f\u007f-\u009f]/g, '').trim().slice(0, max)
+  const cleaned = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, max)
   return cleaned || undefined
-}
-
-/** TMDb-relative image paths only: leading slash, no scheme/host/traversal.
- *  Shared by img() and import normalization so a crafted payload can never
- *  store an arbitrary URL into the library. */
-export const isSafeImagePath = (path: string): boolean => {
-  // Reject absolute URLs and data/blob — only allow TMDb relative paths like /abc.jpg
-  if (path.startsWith('data:') || path.startsWith('blob:') || path.startsWith('http://') || path.startsWith('https://')) return false
-  if (path.includes('..') || path.includes('\\') || !path.startsWith('/')) return false
-  // Basic allowlist: / + alphanum + / . - _
-  return /^\/[A-Za-z0-9/_\-.]+$/.test(path)
 }
 
 // Only allow TMDb-relative paths; reject data:, blob:, http, and traversal

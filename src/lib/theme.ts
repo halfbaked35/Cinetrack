@@ -259,8 +259,26 @@ export function getLuminance(hex: string): number {
   return (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000
 }
 
+/** WCAG 2.x relative luminance (0 = black, 1 = white). */
+export function relativeLuminance(hex: string): number {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return 1
+  const channel = (value: number) => {
+    const c = value / 255
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b)
+}
+
+/** WCAG contrast ratio between two colours, from 1 (none) to 21. */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x) as [number, number]
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+/** Whichever text colour reads better on `hex` by WCAG contrast. */
 export function getContrastColor(hex: string, darkChoice = '#14130f', lightChoice = '#fdfbf6'): string {
-  return getLuminance(hex) >= 142 ? darkChoice : lightChoice
+  return contrastRatio(hex, darkChoice) >= contrastRatio(hex, lightChoice) ? darkChoice : lightChoice
 }
 
 const CSS_THEME_VARS = [
@@ -287,10 +305,25 @@ const CSS_THEME_VARS = [
   '--status-watched-foreground',
 ] as const
 
+/** localStorage key read by public/theme-boot.js before first paint. */
+export const THEME_HINT_KEY = 'cinetrack.theme'
+
+/** Remember the applied theme so the next load can paint it immediately. */
+export function rememberThemeHint(hint: { theme: ThemeId; vars: Record<string, string> | null; scheme: 'light' | 'dark'; color?: string; round?: boolean }) {
+  try {
+    window.localStorage.setItem(THEME_HINT_KEY, JSON.stringify(hint))
+  } catch {
+    // Private mode / blocked storage: the theme still applies after load.
+  }
+}
+
+const DARK_PRESETS = new Set<ThemeId>(['halide', 'velvet', 'black'])
+
 export function applyTheme(
   theme: ThemeId,
   customColors?: Partial<CustomThemeColors> | null,
   getPresetThemeColor?: (t: ThemeId) => string | undefined,
+  round = false,
 ) {
   if (typeof document === 'undefined') return
   const root = document.documentElement
@@ -325,7 +358,7 @@ export function applyTheme(
     root.style.setProperty('--border', borderHex)
     root.style.setProperty('--ring', primaryHex)
 
-    const isDark = getLuminance(bgHex) < 130
+    const isDark = relativeLuminance(bgHex) < 0.2
     root.style.setProperty(
       '--tooth',
       isDark ? 'rgba(245, 245, 245, 0.03)' : 'rgba(20, 19, 15, 0.045)',
@@ -358,15 +391,25 @@ export function applyTheme(
       root.style.removeProperty('--status-watched-foreground')
     }
 
+    root.style.colorScheme = isDark ? 'dark' : 'light'
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', bgHex)
+    const vars: Record<string, string> = {}
+    for (const name of CSS_THEME_VARS) {
+      const value = root.style.getPropertyValue(name)
+      if (value) vars[name] = value
+    }
+    rememberThemeHint({ theme, vars, scheme: isDark ? 'dark' : 'light', color: bgHex, round })
   } else {
     // Clear all inline overrides so the [data-theme] CSS rules take canonical effect
     for (const v of CSS_THEME_VARS) {
       root.style.removeProperty(v)
     }
+    const scheme = DARK_PRESETS.has(theme) ? 'dark' : 'light'
+    root.style.colorScheme = scheme
     const themeColor = getPresetThemeColor ? getPresetThemeColor(theme) : undefined
     if (themeColor) {
       document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColor)
     }
+    rememberThemeHint({ theme, vars: null, scheme, color: themeColor, round })
   }
 }

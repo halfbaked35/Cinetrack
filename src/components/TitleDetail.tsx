@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   details,
@@ -15,6 +15,7 @@ import {
 import {
   canLogRewatch,
   epKey,
+  useEntry,
   fromDateInput,
   isCompletedAtLeastOnce,
   originalCompletionAt,
@@ -22,6 +23,7 @@ import {
   toDateInput,
   todayInput,
   useLibrary,
+  useLibraryStatus,
   watchedCount,
   type Entry,
   type Status,
@@ -83,20 +85,23 @@ export default function TitleDetail({
   useBodyScrollLock(true)
   useFocusTrap(panelRef)
   const { settings } = useSettings()
+  const libraryStatus = useLibraryStatus()
   const metadataLanguage = settings.metadataLanguage
   const castTrackRef = useRef<HTMLDivElement>(null)
+  // Actions only: the drawer subscribes to its own record via useEntry, so
+  // edits to other titles don't re-render it.
   const {
-    get,
     upsert,
     remove,
+    restore,
     toggleEpisode,
     setSeasonWatched,
     setRewatching,
     addRewatch,
     setRewatchDate,
     removeRewatch,
-  } = useLibrary()
-  const entry = get(type, id)
+  } = useLibrary(false)
+  const entry = useEntry(type, id)
   const seasonEpisodeTotal = data?.seasons?.reduce(
     (total, season) => total + (Number.isSafeInteger(season.episode_count) ? Math.max(0, season.episode_count) : 0),
     0,
@@ -191,10 +196,23 @@ export default function TitleDetail({
     title: entry.title,
     poster_path: entry.poster,
     backdrop_path: entry.backdrop,
-    overview: entry.note || '',
-    vote_average: entry.rating || 0,
+    overview: '',
+    // Never stand the user's own rating in for the community score.
+    vote_average: 0,
     release_date: entry.year,
   } as TmdbTitle) : null)
+
+  // The tab names the open title; the page view restores its own on close.
+  const displayTitle = entry?.title || (source ? titleOf(source) : null)
+  useEffect(() => {
+    if (!displayTitle) return
+    const previous = document.title
+    document.title = `${displayTitle} · CineTrack`
+    return () => {
+      document.title = previous
+    }
+  }, [displayTitle])
+  const contentLang = metadataLanguage.split('-')[0] !== 'en' ? metadataLanguage : undefined
   const cast = data?.credits?.cast ?? []
 
   // Hero plate. The stored poster wins over the fetched one so a shelf that has
@@ -219,7 +237,7 @@ export default function TitleDetail({
   const releaseLabel = formatReleaseDate(releaseRaw)
 
   /** Single transition table for status changes (picker + confirms). */
-  const applyStatus = (s: Status) => {
+  const applyStatus = (s: Status, announce = true) => {
     if (!entry) return
     if (s === 'dropped' && !canSetDropped(type, entry.status, watchedCount(entry))) return
     const now = Date.now()
@@ -239,7 +257,7 @@ export default function TitleDetail({
       ...(episodesPatch ? { episodes: episodesPatch } : {}),
       ...(transition.clearEpisodes && type === 'tv' ? { rewatching: false, rewatchEpisodes: {} } : {}),
     })
-    toast(`Marked ${STATUS_BADGE[s]?.label?.toLowerCase() ?? s}`, 'info')
+    if (announce) toast(`Marked ${STATUS_BADGE[s]?.label?.toLowerCase() ?? s}`, 'info')
   }
 
   const imdbIdRaw = data?.imdb_id ?? data?.external_ids?.imdb_id ?? null
@@ -251,8 +269,9 @@ export default function TitleDetail({
           ? (formattedRuntime ? [{ text: formattedRuntime }] : [])
           : [{ text: `${data?.number_of_episodes ?? entry?.totalEpisodes ?? '—'} EPISODES` }]),
         ...(typeof source.vote_average === 'number' && source.vote_average > 0
-          ? [{ text: `IMDb ${source.vote_average.toFixed(1)}`, isScore: true, href: imdbId ? `https://www.imdb.com/title/${imdbId}/` : undefined }]
+          ? [{ text: `TMDb ${source.vote_average.toFixed(1)}`, isScore: true }]
           : []),
+        ...(imdbId ? [{ text: 'IMDb', href: `https://www.imdb.com/title/${imdbId}/` }] : []),
       ]
     : []
 
@@ -313,8 +332,8 @@ export default function TitleDetail({
                 </button>
               </div>
             )}
-            <div className="grid gap-8 px-6 pb-5 pt-7 lg:grid-cols-[230px_1fr] lg:grid-rows-[345px]">
-              <PosterTilt className="select-none">
+            <div className="grid gap-6 px-4 pb-5 pt-6 sm:grid-cols-[160px_1fr] sm:px-6 sm:pt-7 lg:grid-cols-[230px_1fr] lg:grid-rows-[345px] lg:gap-8">
+              <PosterTilt className="w-full max-w-[180px] select-none sm:max-w-none">
                 <div data-poster-surface className="overflow-hidden border border-border lg:h-[345px] lg:min-h-0">
                   {heroArt.status === 'ready' || heroArt.status === 'loading' ? (
                     <img
@@ -343,29 +362,38 @@ export default function TitleDetail({
               </PosterTilt>
 
               <div className="animate-rise relative flex flex-col [animation-delay:80ms] lg:h-[345px] lg:min-h-0">
-                <h1 className="line-clamp-2 min-h-[2.75rem] overflow-hidden font-display text-[42px] leading-[1.05] tracking-tight">{entry?.title || titleOf(source)}</h1>
-                <p className="mt-1 h-4 truncate font-sans text-[11px] tracking-[0.14em] text-muted-foreground">
+                <h1 lang={entry?.title ? undefined : contentLang} className="line-clamp-2 min-h-[2.75rem] overflow-hidden font-display text-[34px] leading-[1.05] tracking-tight sm:text-[42px]">{entry?.title || titleOf(source)}</h1>
+                <p className="mt-1 font-sans text-[11px] tracking-[0.14em] text-muted-foreground lg:truncate">
                   {metaParts.map((part, idx) => (
                     <span key={idx}>
                       {idx > 0 && <span className="mx-2 text-border">·</span>}
-                      {part.isScore && part.href ? (
+                      {part.href ? (
                         <a
                           href={part.href}
                           target="_blank"
                           rel="noopener noreferrer"
+                          referrerPolicy="no-referrer"
                           className="font-medium text-[var(--primary)] underline decoration-[var(--primary)]/40 underline-offset-[3px] transition-opacity hover:opacity-75"
-                          title="View on IMDb"
                         >
                           {part.text}
+                          <span className="sr-only"> (opens IMDb in a new tab)</span>
                         </a>
+                      ) : part.isScore ? (
+                        <span title="TMDb community score">{part.text}</span>
                       ) : (
                         part.text
                       )}
                     </span>
                   ))}
                 </p>
-                <div className="relative mt-2 min-h-0 max-w-prose flex-1 overflow-hidden">
-                  <p className="h-full overflow-hidden text-[14px] leading-relaxed text-secondary-foreground">
+                <div className="relative mt-2 min-h-0 max-w-prose flex-1">
+                  {/* Scrolls rather than clipping long synopses in the fixed-height desktop layout. */}
+                  <p
+                    lang={contentLang}
+                    tabIndex={0}
+                    aria-label="Synopsis"
+                    className="quiet-scroll text-[14px] leading-relaxed text-secondary-foreground lg:h-full lg:overflow-y-auto lg:pb-16"
+                  >
                     {source.overview || 'No synopsis on file.'}
                   </p>
                 </div>
@@ -381,7 +409,12 @@ export default function TitleDetail({
                 <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-border pt-4 lg:absolute lg:inset-x-0 lg:bottom-0 lg:mt-0 lg:flex-nowrap lg:items-end">
                   {!entry ? (
                     <button
-                      onClick={() => add({ status: settings.defaultStatus })}
+                      type="button"
+                      disabled={!libraryStatus.hydrated}
+                      onClick={() => {
+                        add({ status: settings.defaultStatus })
+                        toast(`${displayTitle ?? 'Title'} added to your shelf`, 'success')
+                      }}
                       className="press animate-tick flex h-8 items-center gap-2 bg-[var(--primary)] px-5 font-sans text-[11px] font-medium uppercase tracking-[0.16em] text-primary-foreground hover:opacity-85"
                     >
                       <svg
@@ -448,9 +481,9 @@ export default function TitleDetail({
                       </div>
                       <div className="flex items-center gap-2">
                         <IconButton
-                          label={entry.favorite ? 'Remove favourite' : 'Mark favourite'}
-                          tooltip={entry.favorite ? 'Remove favourite' : 'Mark favourite'}
-                          active={entry.favorite}
+                          label="Favourite"
+                          tooltip={entry.favorite ? 'Remove from favourites' : 'Add to favourites'}
+                          pressed={entry.favorite}
                           onClick={() => upsert(type, id, { favorite: !entry.favorite })}
                         >
                           <HeartIcon filled={entry.favorite} />
@@ -466,6 +499,7 @@ export default function TitleDetail({
                           }
                           disabled={!isCompletedAtLeastOnce(entry)}
                           active={entry.rewatches.length > 0}
+                          hasPopup
                           onClick={() => {
                             if (!isCompletedAtLeastOnce(entry)) return
                             setRewatchOpen(true)
@@ -479,17 +513,19 @@ export default function TitleDetail({
                           )}
                         </IconButton>
                         <IconButton
-                          label="Edit metadata"
-                          tooltip="Edit metadata"
+                          label="Edit details"
+                          tooltip="Edit details"
                           active={editing}
-                          onClick={() => setEditing((v) => !v)}
+                          hasPopup
+                          onClick={() => setEditing(true)}
                         >
                           <PencilIcon />
                         </IconButton>
                         <IconButton
-                          label="Delete"
-                          tooltip={null}
+                          label="Remove from shelf"
+                          tooltip="Remove from shelf"
                           tone="danger"
+                          hasPopup
                           onClick={() => setConfirmDeaccession(true)}
                         >
                           <TrashIcon />
@@ -632,36 +668,40 @@ export default function TitleDetail({
 
         <ConfirmDialog
           open={pendingStatus !== null}
-          title="Start Over"
+          title="Start over?"
           message={
             <>
-              Setting <strong className="text-foreground">{source ? titleOf(source) : 'this title'}</strong> back
-              to Planned will clear its original and rewatch episode progress. This cannot be undone.
+              Moving <strong className="text-foreground">{entry?.title || (source ? titleOf(source) : 'this title')}</strong> back
+              to Planned clears its episode progress, including any rewatch. You can undo this right afterwards.
             </>
           }
-          confirmLabel="Clear episodes"
+          confirmLabel="Clear progress"
           onCancel={() => setPendingStatus(null)}
           onConfirm={() => {
-            if (pendingStatus) applyStatus(pendingStatus)
+            const before = entry
+            if (pendingStatus) applyStatus(pendingStatus, false)
             setPendingStatus(null)
+            if (before) toast('Progress cleared', 'info', { action: { label: 'Undo', onAction: () => restore(before) } })
           }}
         />
 
         <ConfirmDialog
           open={confirmDeaccession}
-          title="Delete Title"
+          title="Remove from shelf?"
           message={
             <>
-              Are you sure you want to delete <strong className="text-foreground">{source ? titleOf(source) : 'this title'}</strong> from your archive? All watch history, ratings, and logged episodes will be permanently removed.
+              <strong className="text-foreground">{entry?.title || (source ? titleOf(source) : 'This title')}</strong> and its watch
+              history, rating and logged episodes will be removed. You can undo this right afterwards.
             </>
           }
-          confirmLabel="Delete"
+          confirmLabel="Remove"
           onCancel={() => setConfirmDeaccession(false)}
           onConfirm={() => {
-            const name = source ? titleOf(source) : 'Title'
+            const name = entry?.title || (source ? titleOf(source) : 'Title')
+            const removed = entry
             setConfirmDeaccession(false)
             remove(type, id)
-            toast(`${name} removed`, 'info')
+            toast(`${name} removed from your shelf`, 'info', removed ? { action: { label: 'Undo', onAction: () => restore(removed) } } : undefined)
             onClose()
           }}
         />
@@ -688,50 +728,56 @@ function IconButton({
   children,
   label,
   tooltip,
+  pressed,
   active,
   disabled = false,
+  hasPopup = false,
   tone = 'default',
   onClick,
 }: {
   children: React.ReactNode
+  /** Stable accessible name ("Favourite", "Delete"). */
   label: string
+  /** Visible hint; null hides it. Also read as the button's description. */
   tooltip?: string | null
+  /** Toggle state for on/off buttons (announced as pressed). */
+  pressed?: boolean
+  /** Visual emphasis only. */
   active?: boolean
+  /** Stays focusable so keyboard users can still hear why it is unavailable. */
   disabled?: boolean
+  hasPopup?: boolean
   tone?: 'default' | 'danger'
   onClick: () => void
 }) {
-  const showTooltip = tooltip !== null
-  const tip = tooltip ?? label
+  const tip = tooltip === null ? null : tooltip ?? label
   const hoverTip = useTimedTooltip()
+  const tipId = useId()
+  const highlighted = pressed ?? active
 
   return (
-    <div
-      className="relative"
-      tabIndex={disabled ? 0 : undefined}
-      onMouseEnter={hoverTip.show}
-      onMouseLeave={hoverTip.scheduleHide}
-      onFocus={hoverTip.show}
-      onBlur={hoverTip.scheduleHide}
-    >
+    <div className="relative" onMouseEnter={hoverTip.show} onMouseLeave={hoverTip.hide}>
       <button
         type="button"
-        disabled={disabled}
         onClick={() => {
           if (disabled) return
           hoverTip.hide()
           onClick()
         }}
+        onFocus={hoverTip.show}
+        onBlur={hoverTip.hide}
         aria-label={label}
-        aria-pressed={active}
-        aria-disabled={disabled}
+        aria-pressed={pressed}
+        aria-haspopup={hasPopup ? 'dialog' : undefined}
+        aria-disabled={disabled || undefined}
+        aria-describedby={tip && tip !== label ? tipId : undefined}
         className={`relative flex h-9 w-9 items-center justify-center border transition-colors ${
           disabled
-            ? 'cursor-not-allowed border-border/40 text-muted-foreground/35 opacity-40'
+            ? 'cursor-not-allowed border-border text-muted-foreground opacity-50'
             : `press ${
                 tone === 'danger'
                   ? 'border-[var(--destructive)]/40 bg-[var(--destructive)]/[0.06] text-[var(--destructive)] hover:border-[var(--destructive)] hover:bg-[var(--destructive)] hover:text-[var(--destructive-foreground)]'
-                  : active
+                  : highlighted
                     ? 'border-[var(--primary)] text-[var(--primary)]'
                     : 'border-border text-muted-foreground hover:border-[var(--foreground)] hover:text-foreground'
               }`
@@ -739,8 +785,12 @@ function IconButton({
       >
         {children}
       </button>
-      {showTooltip && (
-        <span className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap border border-border bg-foreground px-2 py-0.5 font-sans text-[10px] font-medium tracking-[0.04em] text-background transition-opacity duration-150 z-30 shadow-xs select-none ${hoverTip.visible ? 'opacity-100' : 'opacity-0'}`}>
+      {tip && (
+        <span
+          id={tipId}
+          role="tooltip"
+          className={`pointer-events-none absolute -top-8 left-1/2 z-30 -translate-x-1/2 select-none whitespace-nowrap border border-border bg-foreground px-2 py-0.5 font-sans text-[10px] font-medium tracking-[0.04em] text-background shadow-xs transition-opacity duration-150 ${hoverTip.visible ? 'opacity-100' : 'opacity-0'}`}
+        >
           {tip}
         </span>
       )}
@@ -1085,26 +1135,26 @@ function StatusButtons({
       <div
         className="relative"
         onMouseEnter={hintTip.show}
-        onMouseLeave={hintTip.scheduleHide}
+        onMouseLeave={hintTip.hide}
         onFocus={hintTip.show}
-        onBlur={hintTip.scheduleHide}
+        onBlur={hintTip.hide}
       >
         <button
           type="button"
-          onClick={(e) => {
-            ;(e.currentTarget as HTMLButtonElement).blur()
+          onClick={() => {
+            // Keep focus on the trigger: the status dialog returns it here on close.
             hintTip.hide()
             setModalOpen(true)
           }}
           aria-haspopup="dialog"
           aria-expanded={modalOpen}
-          aria-label={`Status: ${badge?.label ?? status}${rewatching ? ', rewatching' : ''}. Activate to change status`}
+          aria-label={`Status: ${badge?.label ?? status}${rewatching ? ', rewatching' : ''}. Change status`}
           className={`press flex h-8 w-[108px] shrink-0 items-center justify-center px-3 font-sans text-[11px] font-medium uppercase tracking-[0.14em] shadow-xs transition-opacity hover:opacity-90 ${badgeStyle}`}
         >
           <span>{badge?.label ?? status}</span>
         </button>
         <span className={`pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap border border-border bg-foreground px-2 py-0.5 font-sans text-[10px] font-medium tracking-[0.04em] text-background transition-opacity duration-150 z-30 shadow-xs select-none ${hintTip.visible ? 'opacity-100' : 'opacity-0'}`}>
-          Click to change status
+          Change status
         </span>
       </div>
       {rewatching && <span className="rule-label flex items-center gap-1 text-[9px] text-[var(--primary)]"><RewatchIcon /> Rewatching</span>}
@@ -1161,7 +1211,10 @@ function EditModal({
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
-  // Draft-only editing — nothing commits until Save.
+  // Draft-only editing — nothing commits until Save. Edits are measured
+  // against the record as it was when the editor opened: a background update
+  // (e.g. runtime filled in from TMDb) is neither "unsaved" nor overwritten.
+  const [initial] = useState(entry)
   const [draftRating, setDraftRating] = useState(entry.rating)
   const [draftFavorite, setDraftFavorite] = useState(entry.favorite)
   const [draftWatchedAt, setDraftWatchedAt] = useState(entry.watchedAt)
@@ -1215,19 +1268,19 @@ function EditModal({
 
   const isDirty =
     posterProcessing ||
-    draftRating !== entry.rating ||
-    draftFavorite !== entry.favorite ||
-    draftWatchedAt !== entry.watchedAt ||
-    draftStatus !== entry.status ||
-    draftRewatching !== entry.rewatching ||
-    customTitle.trim() !== (entry.title ?? '') ||
-    customYear.trim() !== (entry.year ?? '') ||
+    draftRating !== initial.rating ||
+    draftFavorite !== initial.favorite ||
+    draftWatchedAt !== initial.watchedAt ||
+    draftStatus !== initial.status ||
+    draftRewatching !== initial.rewatching ||
+    customTitle.trim() !== (initial.title ?? '') ||
+    customYear.trim() !== (initial.year ?? '') ||
     (type === 'movie'
-      ? customRuntime.trim() !== (entry.runtime != null ? String(entry.runtime) : '')
-      : customEpisodes.trim() !== (entry.totalEpisodes != null ? String(entry.totalEpisodes) : '')) ||
-    customPosterPath.trim() !== (entry.poster ?? '') ||
-    customPosterImage !== (entry.customPoster ?? null) ||
-    customNote.trim() !== (entry.note ?? '')
+      ? customRuntime.trim() !== (initial.runtime != null ? String(initial.runtime) : '')
+      : customEpisodes.trim() !== (initial.totalEpisodes != null ? String(initial.totalEpisodes) : '')) ||
+    customPosterPath.trim() !== (initial.poster ?? '') ||
+    customPosterImage !== (initial.customPoster ?? null) ||
+    customNote.trim() !== (initial.note ?? '')
 
   /** X / backdrop / Escape: discard, but confirm first when dirty. */
   const dirtyRef = useRef(false)
@@ -1244,8 +1297,8 @@ function EditModal({
       return
     }
     const patch: Partial<Entry> = {}
-    if (draftRating !== entry.rating) patch.rating = draftRating
-    if (draftFavorite !== entry.favorite) patch.favorite = draftFavorite
+    if (draftRating !== initial.rating) patch.rating = draftRating
+    if (draftFavorite !== initial.favorite) patch.favorite = draftFavorite
     const priorCompletion = draftWatchedAt !== entry.watchedAt
       ? draftWatchedAt
       : entry.status === 'watched'
@@ -1266,22 +1319,22 @@ function EditModal({
       patch.rewatching = entry.status === 'watched' && draftStatus === 'watched' && draftRewatching
     }
     const t = customTitle.trim()
-    if (t && t !== entry.title) patch.title = t
-    if (customYear.trim() !== entry.year) patch.year = customYear.trim()
+    if (t && t !== initial.title) patch.title = t
+    if (customYear.trim() !== initial.year) patch.year = customYear.trim()
     if (type === 'movie') {
       const r = customRuntime.trim() ? parseInt(customRuntime.trim(), 10) : null
-      if (!isNaN(r as number) && r !== entry.runtime) patch.runtime = r
-      else if (customRuntime.trim() === '' && entry.runtime !== null) patch.runtime = null
+      if (r !== null && Number.isFinite(r) && r !== initial.runtime) patch.runtime = r
+      else if (customRuntime.trim() === '' && initial.runtime !== null) patch.runtime = null
     } else {
       const ep = customEpisodes.trim() ? parseInt(customEpisodes.trim(), 10) : null
-      if (!isNaN(ep as number) && ep !== entry.totalEpisodes) patch.totalEpisodes = ep
-      else if (customEpisodes.trim() === '' && entry.totalEpisodes !== null) patch.totalEpisodes = null
+      if (ep !== null && Number.isFinite(ep) && ep !== initial.totalEpisodes) patch.totalEpisodes = ep
+      else if (customEpisodes.trim() === '' && initial.totalEpisodes !== null) patch.totalEpisodes = null
     }
     const p = customPosterPath.trim()
-    if (p !== (entry.poster ?? '')) patch.poster = p || null
-    if (customPosterImage !== (entry.customPoster ?? null)) patch.customPoster = customPosterImage
+    if (p !== (initial.poster ?? '')) patch.poster = p || null
+    if (customPosterImage !== (initial.customPoster ?? null)) patch.customPoster = customPosterImage
     const n = customNote.trim()
-    if (n !== (entry.note ?? '')) patch.note = n || undefined
+    if (n !== (initial.note ?? '')) patch.note = n || undefined
     // Mirror the status picker's episode side-effects for shows: marking
     // watched fills every real season, while moving to Planned clears progress
     // except when resuming from Dropped, which preserves the viewing history.
@@ -1317,6 +1370,7 @@ function EditModal({
     posterProcessing,
     customNote,
     entry,
+    initial,
     seasons,
     onUpsert,
     toast,
@@ -1604,8 +1658,10 @@ function EditModal({
                   <input
                     type="text"
                     aria-label="Release year"
+                    inputMode="numeric"
+                    pattern="[0-9]{4}"
                     value={customYear}
-                    onChange={(e) => setCustomYear(e.target.value)}
+                    onChange={(e) => setCustomYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     placeholder="YYYY"
                     maxLength={4}
                     className="h-8 w-full border border-border bg-background px-2.5 font-sans text-[11px] text-foreground outline-none transition-colors focus:border-[var(--primary)]"
@@ -1870,19 +1926,25 @@ function RewatchModal({
           {live.rewatches?.length ? (
             <ul className="space-y-1.5">
               {live.rewatches.map((ts, i) => (
-                <li key={`${ts}-${i}`} className="flex items-center gap-2">
+                <li key={i} className="flex items-center gap-2">
                   <span className="rule-label w-6 text-[10px]">{String(i + 1).padStart(2, '0')}</span>
+                  {/* Uncontrolled + commit on blur: saving (and re-sorting) on every
+                      keystroke remounted the input mid-typing and dropped focus. */}
                   <input
+                    key={ts}
                     type="date"
                     aria-label={`Rewatch ${i + 1} date`}
                     max={todayInput()}
-                    value={toDateInput(ts)}
-                    onChange={(ev) => {
-                      if (!ev.target.value) return
+                    defaultValue={toDateInput(ts)}
+                    onBlur={(ev) => {
                       const at = fromDateInput(ev.target.value)
-                      if (at != null) onSetRewatchDate(i, at)
+                      if (at == null) ev.target.value = toDateInput(ts)
+                      else if (at !== ts) onSetRewatchDate(i, at)
                     }}
-                    className="h-8 flex-1 border border-border bg-background px-2 font-sans text-[11px] outline-none focus:border-[var(--primary)]"
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter') ev.currentTarget.blur()
+                    }}
+                    className="h-8 flex-1 border border-[var(--input)] bg-background px-2 font-sans text-[13px] outline-none focus:border-[var(--foreground)]"
                   />
                   <button
                     type="button"
@@ -1910,12 +1972,14 @@ function RewatchModal({
             <>
               <input
                 type="date"
+                aria-label="Date of the new rewatch"
                 max={todayInput()}
                 value={rewatchDate}
                 onChange={(e) => e.target.value && setRewatchDate(e.target.value)}
-                className="h-8 flex-1 border border-border bg-background px-2 font-sans text-[11px] outline-none focus:border-[var(--primary)]"
+                className="h-8 flex-1 border border-[var(--input)] bg-background px-2 font-sans text-[13px] outline-none focus:border-[var(--foreground)]"
               />
               <button
+                type="button"
                 onClick={() => {
                   const at = fromDateInput(rewatchDate)
                   if (at == null) return
@@ -2205,7 +2269,7 @@ function Seasons({
                     }`}
                   >
                     {confirmClear === s.season_number
-                      ? 'Click again to unmark'
+                      ? 'Select again to unmark'
                       : seen >= s.episode_count
                         ? rewatching ? '✓ Season rewatched' : '✓ Season watched'
                         : rewatching ? 'Mark season rewatched' : 'Mark season watched'}
@@ -2240,27 +2304,25 @@ function Seasons({
                       }`}
                     >
                       <button
-                        disabled={!tracked}
+                        type="button"
+                        aria-disabled={!tracked || undefined}
                         title={
                           !tracked
                             ? completed && !rewatching
                               ? 'Start a rewatch to track new episode progress'
                               : 'Add to shelf to track episodes'
                             : done
-                              ? `Watched${loggedAt ? ` · ${new Date(loggedAt).toLocaleDateString()}` : ''} · Click to unmark`
-                              : `Click to mark ${episodeLabel} watched`
-                        }
-                        aria-label={
-                          !tracked
-                            ? completed && !rewatching
-                              ? `Start a rewatch to track ${episodeLabel}`
-                              : 'Add to shelf to track episodes'
-                            : done
-                              ? `Unmark ${episodeLabel} watched`
+                              ? `Watched${loggedAt ? ` · ${new Date(loggedAt).toLocaleDateString()}` : ''} · select again to unmark`
                               : `Mark ${episodeLabel} watched`
                         }
+                        // Name the episode itself; aria-pressed carries the watched state.
+                        aria-label={`${s.season_number === 0 ? 'Special' : `Season ${s.season_number}`}, episode ${e.episode_number}: ${e.name}${
+                          !tracked ? (completed && !rewatching ? ' (start a rewatch to track)' : ' (add to shelf to track)') : ''
+                        }`}
                         aria-pressed={done}
-                        onClick={() => onToggle(s.season_number, e.episode_number)}
+                        onClick={() => {
+                          if (tracked) onToggle(s.season_number, e.episode_number)
+                        }}
                         className={`press flex min-w-0 flex-1 items-center gap-4 px-4 py-3 text-left transition-colors ${
                           tracked ? 'hover:bg-secondary/60' : 'cursor-default'
                         }`}
@@ -2304,12 +2366,12 @@ function Seasons({
                             {e.name}
                           </span>
                           {e.overview && !descriptionHidden && (
-                            <span className="mt-1 line-clamp-2 block text-[12px] leading-relaxed text-muted-foreground/80">
+                            <span className="mt-1 line-clamp-2 block text-[12px] leading-relaxed text-muted-foreground">
                               {e.overview}
                             </span>
                           )}
                         </span>
-                        <div className="flex shrink-0 items-center gap-4">
+                        <span className="flex shrink-0 items-center gap-4">
                           <span className="hidden text-right font-sans text-[10px] tabular-nums text-muted-foreground sm:block">
                             <span className="block">{formatEpisodeDate(e.air_date)}</span>
                             {e.runtime ? <span className="block">{e.runtime} min</span> : null}
@@ -2361,7 +2423,7 @@ function Seasons({
                               </svg>
                             ) : null}
                           </span>
-                        </div>
+                        </span>
                       </button>
                     </div>
                   )

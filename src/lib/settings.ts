@@ -314,11 +314,14 @@ export function applyTheme(theme: ThemeId, customColors?: Partial<CustomThemeCol
     theme,
     customColors !== undefined ? customColors : cache?.customColors,
     (t) => THEMES.find((item) => item.id === t)?.swatch[0],
+    cache?.roundPosters ?? false,
   )
 }
 export function applyRoundPosters(round: boolean) {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.roundPosters = round ? 'true' : 'false'
+  // Refresh the pre-paint hint so the next load rounds posters immediately.
+  if (cache) applyTheme(cache.theme, cache.customColors)
 }
 try {
   applyTheme(cache.theme, cache.customColors)
@@ -379,7 +382,7 @@ async function flushSettingsChanges() {
               `[settings] database permanently rejected ${Object.keys(changes).length} change(s) (${res.status}${message ? ` — ${message}` : ''}); the batch was dropped and will not be retried`,
             )
             permanentFailure = true
-            continue
+            break
           }
           throw new Error(`Database rejected settings (${res.status})`)
         }
@@ -400,16 +403,25 @@ async function flushSettingsChanges() {
   } finally {
     settingsWriteRunning = false
     if (permanentFailure) {
-      const dropped = pendingSettingsChanges.size
-      pendingSettingsChanges.clear()
-      if (dropped > 0) {
-        console.error(`[settings] ${dropped} further pending change(s) dropped after a permanent database rejection`)
-      }
       setPersistenceState('settings', 'error')
+      // Later, unrelated changes still deserve a save attempt.
+      if (pendingSettingsChanges.size > 0) scheduleSettingsRetry()
     } else if (pendingSettingsChanges.size === 0) {
       setPersistenceState('settings', 'saved')
     }
   }
+}
+
+/** Coalesce bursts (typing a name, dragging a colour) into one save. */
+const SAVE_DEBOUNCE_MS = 400
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushSoon() {
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer)
+  saveDebounceTimer = setTimeout(() => {
+    saveDebounceTimer = null
+    void flushSettingsChanges()
+  }, SAVE_DEBOUNCE_MS)
 }
 
 function saveToDatabase(changes: Record<string, unknown>) {
@@ -418,82 +430,111 @@ function saveToDatabase(changes: Record<string, unknown>) {
     return
   }
   for (const [key, value] of Object.entries(changes)) pendingSettingsChanges.set(key, value)
-  if (pendingSettingsChanges.size > 0) void flushSettingsChanges()
+  if (pendingSettingsChanges.size > 0) {
+    setPersistenceState('settings', 'saving')
+    flushSoon()
+  }
+}
+
+/** True while preference changes exist that the database has not confirmed. */
+export function hasUnsavedSettingsChanges(): boolean {
+  return settingsWriteRunning || saveDebounceTimer !== null || pendingSettingsChanges.size > 0
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => void flushSettingsChanges())
+  window.addEventListener('online', () => {
+    if (hydrating) retrySettingsLoad()
+    void flushSettingsChanges()
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return
+    if (saveDebounceTimer) {
+      clearTimeout(saveDebounceTimer)
+      saveDebounceTimer = null
+    }
+    void flushSettingsChanges()
+  })
 }
 
+let hydrationAttempt = 0
+let hydrationTimer: ReturnType<typeof setTimeout> | null = null
+let hydrationRunning = false
+
+/**
+ * Load saved preferences. Until this succeeds the app runs on local values;
+ * edits made meanwhile are marked dirty and win over the stored copy once it
+ * arrives. A failed load retries with backoff instead of giving up.
+ */
 async function hydrateFromSqlite() {
-  let stored: Record<string, unknown> | null = null
+  if (!hydrating || hydrationRunning || typeof fetch !== 'function') return
+  hydrationRunning = true
+  let stored: Record<string, unknown>
   try {
-    if (typeof fetch !== 'function') return
     const controller = new AbortController()
-    const t = setTimeout(() => controller.abort(), 2500)
-    const res = await fetch(SETTINGS_ENDPOINT, { signal: controller.signal }).catch(() => null as unknown as Response)
-    clearTimeout(t)
-    if (!res?.ok) return
-    const ct = res.headers.get('content-type') || ''
-    if (!ct.includes('application/json')) return
-    const result: unknown = await res.json()
-    if (!result || typeof result !== 'object' || Array.isArray(result)) return
-    stored = result as Record<string, unknown>
-  } catch {
-    // Keep legacy settings in memory and in place until the database is reachable.
-  } finally {
-    hydrating = false
-    if (stored) {
-      stashExtras(stored, { merge: true })
-      const sanitized = sanitize(stored as Partial<Settings> & Record<string, unknown>)
-      // Keep locally customized values during the one-time migration. The
-      // database fills untouched/default values and remains canonical after it.
-      const merged: Record<string, unknown> = { ...sanitized }
-      for (const [k, v] of Object.entries(cache)) {
-        if (dirtyKeys.has(k as keyof Settings) || JSON.stringify(v) !== JSON.stringify(DEFAULTS[k as keyof Settings])) {
-          merged[k] = v
-        }
-      }
-      cache = sanitize(merged)
-      try {
-        applyTheme(cache.theme, cache.customColors)
-        applyRoundPosters(cache.roundPosters)
-      } catch {}
-      const current = withExtras(cache)
-      const changes: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(current)) {
-        if (JSON.stringify(stored[key]) !== JSON.stringify(value)) changes[key] = value
-      }
-      if (legacySettingsPresent || hasMutatedDuringHydration) {
-        if (Object.keys(changes).length > 0) saveToDatabase(changes)
-        else {
-          clearLegacyStorage()
-          setPersistenceState('settings', 'saved')
-        }
-      } else {
-        clearLegacyStorage()
-        setPersistenceState('settings', 'saved')
-      }
-      notify()
-    } else {
-      // Retry only legacy custom values and explicit edits. Defaults are not
-      // written over settings that could not be read during this request.
-      const changes: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(cache)) {
-        if (dirtyKeys.has(key as keyof Settings) || JSON.stringify(value) !== JSON.stringify(DEFAULTS[key as keyof Settings])) {
-          changes[key] = value
-        }
-      }
-      if (legacySettingsPresent || hasMutatedDuringHydration) {
-        for (const [key, value] of Object.entries(extraKeys)) changes[key] = value
-      }
-      if (Object.keys(changes).length > 0) saveToDatabase(changes)
-      else setPersistenceState('settings', 'error')
+    const timer = setTimeout(() => controller.abort(), 15_000)
+    try {
+      const res = await fetch(SETTINGS_ENDPOINT, { signal: controller.signal, cache: 'no-store' })
+      if (!res.ok || !(res.headers.get('content-type') ?? '').includes('application/json')) throw new Error(`HTTP ${res.status}`)
+      const result: unknown = await res.json()
+      if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid settings payload')
+      stored = result as Record<string, unknown>
+    } finally {
+      clearTimeout(timer)
     }
-    notifySettingsHydrated()
-    hasMutatedDuringHydration = false
-    dirtyKeys.clear()
+  } catch {
+    hydrationRunning = false
+    setPersistenceState('settings', 'error')
+    const delay = Math.min(30_000, 1000 * 2 ** hydrationAttempt++)
+    hydrationTimer = setTimeout(() => {
+      hydrationTimer = null
+      void hydrateFromSqlite()
+    }, delay)
+    return
   }
+  hydrationRunning = false
+  hydrating = false
+
+  stashExtras(stored, { merge: true })
+  const sanitized = sanitize(stored as Partial<Settings> & Record<string, unknown>)
+  // Keep locally customized values (legacy browser settings and edits made
+  // while loading). The database fills the rest and is canonical afterwards.
+  const merged: Record<string, unknown> = { ...sanitized }
+  for (const [k, v] of Object.entries(cache)) {
+    if (dirtyKeys.has(k as keyof Settings) || (legacySettingsPresent && JSON.stringify(v) !== JSON.stringify(DEFAULTS[k as keyof Settings]))) {
+      merged[k] = v
+    }
+  }
+  cache = sanitize(merged)
+  try {
+    applyTheme(cache.theme, cache.customColors)
+    applyRoundPosters(cache.roundPosters)
+  } catch {}
+  const current = withExtras(cache)
+  const changes: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(current)) {
+    if (JSON.stringify(stored[key]) !== JSON.stringify(value)) changes[key] = value
+  }
+  if ((legacySettingsPresent || hasMutatedDuringHydration) && Object.keys(changes).length > 0) {
+    saveToDatabase(changes)
+  } else {
+    clearLegacyStorage()
+    setPersistenceState('settings', 'saved')
+  }
+  hasMutatedDuringHydration = false
+  dirtyKeys.clear()
+  notify()
+  notifySettingsHydrated()
+}
+
+/** Retry a failed settings load immediately. */
+export function retrySettingsLoad() {
+  if (!hydrating) return
+  if (hydrationTimer) {
+    clearTimeout(hydrationTimer)
+    hydrationTimer = null
+  }
+  hydrationAttempt = 0
+  void hydrateFromSqlite()
 }
 
 // Settings hydration completion signal
@@ -502,18 +543,54 @@ function notifySettingsHydrated() {
   for (const fn of [...settingsHydrationListeners]) fn()
 }
 export function subscribeSettingsHydrated(cb: () => void): () => void {
-  if (!hydrating) { cb(); return () => {} }
   settingsHydrationListeners.add(cb)
-  return () => settingsHydrationListeners.delete(cb)
+  return () => {
+    settingsHydrationListeners.delete(cb)
+  }
 }
 export function isSettingsHydrated(): boolean {
   return !hydrating
+}
+/** Re-renders once saved preferences have loaded. */
+export function useSettingsHydrated(): boolean {
+  return useSyncExternalStore(subscribeSettingsHydrated, isSettingsHydrated, isSettingsHydrated)
+}
+
+/**
+ * Apply settings from a backup file. Every value goes through the same
+ * sanitizer as stored settings; unknown keys are kept only within the usual
+ * bounds. Returns false if the payload was unusable.
+ */
+export function importSettings(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
+  const incoming = raw as Record<string, unknown>
+  stashExtras(incoming, { merge: true })
+  cache = sanitize({ ...cache, ...(incoming as Partial<Settings>) })
+  try {
+    applyTheme(cache.theme, cache.customColors)
+    applyRoundPosters(cache.roundPosters)
+  } catch {}
+  for (const key of Object.keys(cache) as (keyof Settings)[]) dirtyKeys.add(key)
+  if (hydrating) hasMutatedDuringHydration = true
+  else saveToDatabase(withExtras(cache))
+  notify()
+  return true
+}
+
+/** The current settings (with unknown keys from newer versions) for backups. */
+export function settingsForBackup(): Record<string, unknown> {
+  return withExtras(cache)
 }
 
 void hydrateFromSqlite()
 
 /** Non-reactive read, for modules that aren't components. Returns copy. */
 export const currentSettings = (): Settings => ({ ...cache })
+
+/** Subscribe to one setting: re-renders only when that value changes. */
+export function useSetting<K extends keyof Settings>(key: K): Settings[K] {
+  return useSyncExternalStore(subscribe, () => cache[key], () => cache[key])
+}
 
 export function useSettings() {
   const settings = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)

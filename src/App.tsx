@@ -1,8 +1,21 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
-import { type MediaType, type TmdbTitle } from './lib/tmdb'
-import { useSettings } from './lib/settings'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { MediaType, TmdbTitle } from './lib/tmdb'
+import { useSetting } from './lib/settings'
+import {
+  documentTitleFor,
+  hashFor,
+  HOME,
+  parseHash,
+  routeFromState,
+  sameRoute,
+  type InfoSlug,
+  type Page,
+  type Route,
+} from './lib/route'
 import { Logo, SETTINGS_PANEL_ID, Spinner } from './components/ui'
-import InfoPage, { type InfoSlug } from './components/InfoPages'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { LoadErrorBanner, SaveStatus } from './components/AppStatus'
+import InfoPage from './components/InfoPages'
 import type { LibraryView } from './components/Library'
 
 const Home = lazy(() => import('./components/Home'))
@@ -11,75 +24,137 @@ const Library = lazy(() => import('./components/Library'))
 const TitleDetail = lazy(() => import('./components/TitleDetail'))
 const SettingsPanel = lazy(() => import('./components/SettingsPanel'))
 
-type Page = 'home' | 'discover' | 'library'
-
 const NAV: { id: Page; label: string; key: string }[] = [
   { id: 'home', label: 'Home', key: '1' },
   { id: 'discover', label: 'Discover', key: '2' },
   { id: 'library', label: 'Shelf', key: '3' },
 ]
 
+const FOOTER_LINKS: { slug: InfoSlug; label: string }[] = [
+  { slug: 'privacy', label: 'Privacy' },
+  { slug: 'terms', label: 'Terms' },
+  { slug: 'about', label: 'About' },
+  { slug: 'api', label: 'API' },
+]
+
 /** Shown modifier: ⌥ on Apple platforms, Alt everywhere else. */
-function navModifier(): string {
-  if (typeof navigator === 'undefined') return 'Alt'
-  return /Mac|iPhone|iPad|Macintosh/.test(navigator.userAgent ?? '') ? '⌥' : 'Alt'
+const NAV_MODIFIER = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|Macintosh/.test(navigator.userAgent ?? '') ? '⌥' : 'Alt'
+
+function initialRoute(): Route {
+  if (typeof window === 'undefined') return HOME
+  return routeFromState(window.history.state) ?? parseHash(window.location.hash)
 }
 
-/** Route encoded in the URL fragment, or null when there isn't one.
- *  `#library` is what the app writes, but `#/library` is what people type and
- *  what older bookmarks hold — both name the same page. */
-function routeFromHash(): Page | null {
-  if (typeof window === 'undefined') return null
-  const raw = window.location.hash.replace(/^#\/?/, '')
-  return raw === 'discover' || raw === 'library' || raw === 'home' ? (raw as Page) : null
+/** Warm the title drawer's chunk while idle so the first poster click is instant. */
+function prefetchTitleDetail() {
+  const load = () => void import('./components/TitleDetail')
+  if ('requestIdleCallback' in window) window.requestIdleCallback(load, { timeout: 4000 })
+  else setTimeout(load, 2000)
 }
 
 export default function App() {
-  const [page, setPage] = useState<Page>(() => routeFromHash() ?? 'home')
+  const [route, setRoute] = useState<Route>(initialRoute)
   const [libraryView, setLibraryView] = useState<LibraryView | null>(null)
-  const [info, setInfo] = useState<InfoSlug | null>(null)
-  const [open, setOpen] = useState<{ type: MediaType; id: number; seed?: TmdbTitle } | null>(null)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsMounted, setSettingsMounted] = useState(false)
-  const { settings } = useSettings()
+  const [settingsMounted, setSettingsMounted] = useState(route.settings)
+  const showNavHints = useSetting('showNavHints')
+  /** Seed data for an opening title, so the drawer can paint before details load. */
+  const seeds = useRef(new Map<string, TmdbTitle>())
+  const routeRef = useRef(route)
+  routeRef.current = route
 
-  useEffect(() => {
-    if (settingsOpen) setSettingsMounted(true)
-  }, [settingsOpen])
-
-  const goPage = useCallback((p: Page) => {
-    setInfo(null)
-    setPage(p)
+  /** Move to a new view, recording it in browser history. */
+  const navigate = useCallback((next: Route, options: { replace?: boolean } = {}) => {
+    const current = routeRef.current
+    if (sameRoute(current, next)) return
+    const url = `${window.location.pathname}${window.location.search}${hashFor(next)}`
+    const state = { cinetrack: next, pushed: !options.replace || window.history.state?.pushed === true }
+    if (options.replace) window.history.replaceState(state, '', url)
+    else window.history.pushState(state, '', url)
+    setRoute(next)
   }, [])
 
-  /** Keep the address bar honest: it must never claim a page we aren't showing. */
-  const syncHash = useCallback((p: Page) => {
-    const h = p === 'home' ? '' : `#${p}`
-    if (typeof window !== 'undefined' && window.location.hash !== h) {
-      history.replaceState(null, '', `${window.location.pathname}${window.location.search}${h}`)
+  /** Close an overlay: step back if the app opened it, otherwise replace. */
+  const dismiss = useCallback((next: Route) => {
+    if (window.history.state?.pushed === true && routeFromState(window.history.state)) window.history.back()
+    else navigate(next, { replace: true })
+  }, [navigate])
+
+  // Record the initial route on the entry the browser loaded, so Back from
+  // the first pushed view restores it exactly.
+  useEffect(() => {
+    if (!routeFromState(window.history.state)) {
+      window.history.replaceState({ cinetrack: routeRef.current, pushed: false }, '', `${window.location.pathname}${window.location.search}${hashFor(routeRef.current)}`)
     }
+    prefetchTitleDetail()
   }, [])
 
   useEffect(() => {
-    syncHash(page)
-  }, [page, syncHash])
-
-  useEffect(() => {
-    const onHash = () => {
-      const next = routeFromHash()
-      // An unrecognised fragment routes nowhere: hold the current page and put
-      // the URL back rather than leaving it stuck on something meaningless.
-      if (next) {
-        if (next === 'library') setLibraryView(null)
-        setPage(next)
+    const sync = () => {
+      const next = routeFromState(window.history.state) ?? parseHash(window.location.hash)
+      if (!routeFromState(window.history.state)) {
+        // A typed URL or a plain `#discover` link: adopt it as an app entry.
+        window.history.replaceState({ cinetrack: next, pushed: true }, '', window.location.href)
       }
-      else syncHash(page)
+      setRoute((current) => (sameRoute(current, next) ? current : next))
     }
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
-  }, [page, syncHash])
+    window.addEventListener('popstate', sync)
+    window.addEventListener('hashchange', sync)
+    return () => {
+      window.removeEventListener('popstate', sync)
+      window.removeEventListener('hashchange', sync)
+    }
+  }, [])
 
-  // Alt+1/2/3 jumps between sections, Alt+, opens settings. Physical codes,
+  useEffect(() => {
+    if (route.settings) setSettingsMounted(true)
+  }, [route.settings])
+
+  // Page changes: new document title, back to the top, and focus on the new
+  // view's heading so keyboard and screen-reader users land in the content.
+  const viewKey = route.info ?? route.page
+  const lastView = useRef(viewKey)
+  useEffect(() => {
+    if (!route.title) document.title = documentTitleFor(route)
+  }, [route])
+  useLayoutEffect(() => {
+    if (lastView.current === viewKey) return
+    lastView.current = viewKey
+    window.scrollTo({ top: 0 })
+    const frame = requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>('#main-content h1')
+      const target = heading ?? document.getElementById('main-content')
+      if (!target) return
+      if (heading && !heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1')
+      target.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [viewKey])
+
+  const goPage = useCallback((page: Page, view: LibraryView | null = null) => {
+    if (page === 'library') setLibraryView(view)
+    navigate({ ...HOME, page })
+  }, [navigate])
+
+  const openInfo = useCallback((slug: InfoSlug) => navigate({ ...routeRef.current, info: slug, title: null, settings: false }), [navigate])
+  const closeInfo = useCallback(() => dismiss({ ...routeRef.current, info: null }), [dismiss])
+
+  const openTitle = useCallback((type: MediaType, id: number, seed?: TmdbTitle) => {
+    if (seed) seeds.current.set(`${type}:${id}`, seed)
+    const current = routeRef.current
+    // A title opened from inside another title replaces it, so Close and Back
+    // both return to the page underneath rather than to the previous title.
+    navigate({ ...current, title: { type, id }, settings: false }, { replace: !!current.title })
+  }, [navigate])
+  const closeTitle = useCallback(() => dismiss({ ...routeRef.current, title: null }), [dismiss])
+
+  const setSettingsOpen = useCallback((open: boolean) => {
+    const current = routeRef.current
+    if (open === current.settings) return
+    if (open) navigate({ ...current, settings: true })
+    else dismiss({ ...current, settings: false })
+  }, [navigate, dismiss])
+
+  // Alt+1/2/3 jumps between sections, Alt+, toggles settings. Physical codes,
   // not e.key: macOS Option+digit types ¡™£ instead of the digit.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -87,59 +162,73 @@ export default function App() {
       const focusedTarget = e.target instanceof HTMLElement ? e.target : null
       // Never steal a keystroke while the user is typing into a control.
       if (focusedTarget?.closest('input, textarea, select, [contenteditable="true"]')) return
-      const dialog = focusedTarget?.closest('[role="dialog"]')
+      const dialog = focusedTarget?.closest('[role="dialog"], [role="alertdialog"]')
       if (e.code === 'Comma') {
-        // Alt+, toggles the settings drawer, so it must keep working while an
-        // inner control of that drawer holds focus (the focus trap lands there
-        // on open). Any other dialog keeps its shortcut to itself, so shortcuts
-        // don't leak out from behind modals.
+        // Alt+, must keep working inside the settings drawer it opened; any
+        // other dialog keeps its shortcuts to itself.
         if (dialog && !(dialog instanceof HTMLElement && dialog.id === SETTINGS_PANEL_ID)) return
         e.preventDefault()
-        setSettingsOpen((v) => !v)
+        setSettingsOpen(!routeRef.current.settings)
         return
       }
-      // Page-jump shortcuts never fire while focus is inside a dialog.
       if (dialog) return
-      const digit = e.code.startsWith('Digit')
-        ? e.code.slice(5)
-        : e.code.startsWith('Numpad')
-          ? e.code.slice(6)
-          : null
+      const digit = e.code.startsWith('Digit') ? e.code.slice(5) : e.code.startsWith('Numpad') ? e.code.slice(6) : null
       const target = NAV.find((n) => n.key === digit)
       if (!target) return
       e.preventDefault()
-      if (target.id === 'library') setLibraryView(null)
       goPage(target.id)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goPage])
+  }, [goPage, setSettingsOpen])
 
-  const openTitle = useCallback((type: MediaType, id: number, seed?: TmdbTitle) => setOpen({ type, id, seed }), [])
+  const activePage = route.info ? null : route.page
+  const titleSeed = route.title ? seeds.current.get(`${route.title.type}:${route.title.id}`) : undefined
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <a
+        href="#main-content"
+        onClick={(e) => {
+          e.preventDefault()
+          document.getElementById('main-content')?.focus()
+        }}
+        className="sr-only z-[200] bg-[var(--foreground)] px-4 py-2 text-[var(--background)] focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-40 border-b border-border bg-background">
         {/* Three tracks so the nav sits optically centred regardless of side widths.
             Stretch, not centre: the nav buttons run the full header height so the
             active rule rests on the bottom border. */}
         <div className="grid w-full grid-cols-2 items-stretch gap-3 px-4 md:grid-cols-[1fr_auto_1fr] md:gap-4 lg:px-6">
-          <button onClick={() => goPage('home')} aria-label="CineTrack home" className="press flex items-center justify-self-start py-3">
+          <a
+            href="#"
+            onClick={(e) => {
+              e.preventDefault()
+              goPage('home')
+            }}
+            aria-label="CineTrack home"
+            className="press flex items-center justify-self-start py-3"
+          >
             <Logo size={24} markSize={44} wordmark={false} />
-          </button>
+          </a>
 
-          <nav className="quiet-scroll order-3 col-span-2 flex items-stretch justify-center gap-1 overflow-x-auto md:order-none md:col-span-1 md:col-start-2">
+          <nav aria-label="Main" className="quiet-scroll order-3 col-span-2 flex items-stretch justify-center gap-1 overflow-x-auto md:order-none md:col-span-1 md:col-start-2">
             {NAV.map((n) => (
-              <button
+              <a
                 key={n.id}
-                onClick={() => {
-                  if (n.id === 'library') setLibraryView(null)
+                href={hashFor({ ...HOME, page: n.id }) || '#'}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                  e.preventDefault()
                   goPage(n.id)
                 }}
-                aria-current={page === n.id && !info ? 'page' : undefined}
-                title={`${n.label} (${navModifier()}${n.key})`}
+                aria-current={activePage === n.id ? 'page' : undefined}
+                aria-keyshortcuts={`Alt+${n.key}`}
+                title={`${n.label} (${NAV_MODIFIER}${n.key})`}
                 className={`relative flex items-center justify-center gap-1.5 px-3 py-3 font-sans text-[12px] font-medium uppercase tracking-[0.14em] transition-colors duration-200 ${
-                  page === n.id && !info ? 'text-foreground' : 'text-secondary-foreground hover:text-foreground'
+                  activePage === n.id ? 'text-foreground' : 'text-secondary-foreground hover:text-foreground'
                 }`}
               >
                 <span className="relative">
@@ -147,133 +236,117 @@ export default function App() {
                   <span
                     aria-hidden
                     className={`absolute inset-x-0 bottom-0 h-[2px] origin-left bg-[var(--primary)] transition-transform duration-300 ease-out ${
-                      page === n.id && !info ? 'scale-x-100' : 'scale-x-0'
+                      activePage === n.id ? 'scale-x-100' : 'scale-x-0'
                     }`}
                   />
                 </span>
-                {settings.showNavHints && (
-                  <span aria-hidden className="font-sans text-[10px] tracking-[0.1em] text-muted-foreground">
-                    {navModifier()}
+                {showNavHints && (
+                  <span aria-hidden className="hidden font-sans text-[10px] tracking-[0.1em] text-muted-foreground sm:inline">
+                    {NAV_MODIFIER}
                     {n.key}
                   </span>
                 )}
-              </button>
+              </a>
             ))}
           </nav>
 
           <div className="flex items-center justify-end gap-4 py-3">
+            <SaveStatus />
             <button
-              onClick={() => setSettingsOpen((v) => !v)}
-              aria-label="Open settings"
-              title={settings.showNavHints ? `Settings (${navModifier()},)` : 'Settings'}
+              type="button"
+              onClick={() => setSettingsOpen(!route.settings)}
+              aria-haspopup="dialog"
+              aria-expanded={route.settings}
+              aria-controls={settingsMounted ? SETTINGS_PANEL_ID : undefined}
+              aria-keyshortcuts="Alt+Comma"
+              title={showNavHints ? `Settings (${NAV_MODIFIER},)` : 'Settings'}
               className="press flex h-8 items-center gap-2 border border-border bg-card/50 px-3 font-sans text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors duration-200 hover:border-[var(--foreground)] hover:text-foreground"
             >
               <span>Settings</span>
-              {settings.showNavHints && (
-                <span aria-hidden className="text-[10px] tracking-[0.08em] text-muted-foreground opacity-70">
-                  {navModifier()},
+              {showNavHints && (
+                <span aria-hidden className="hidden text-[10px] tracking-[0.08em] text-muted-foreground opacity-70 sm:inline">
+                  {NAV_MODIFIER},
                 </span>
               )}
             </button>
           </div>
         </div>
+        <LoadErrorBanner />
       </header>
 
       <main id="main-content" tabIndex={-1} className="w-full flex-1 px-4 pb-12 pt-6 outline-none lg:px-6 lg:pb-16 lg:pt-8">
-        <Suspense
-          fallback={
-            <div className="flex min-h-[40vh] items-center justify-center">
-              <Spinner size={28} />
+        <ErrorBoundary resetKey={viewKey} label={viewKey}>
+          <Suspense
+            fallback={
+              <div className="flex min-h-[40vh] items-center justify-center">
+                <Spinner size={28} />
+              </div>
+            }
+          >
+            <div className="page-enter" key={viewKey}>
+              {route.info ? (
+                <InfoPage slug={route.info} onBack={closeInfo} />
+              ) : (
+                <>
+                  {route.page === 'home' && <Home onOpen={openTitle} onLibraryNavigate={(view) => goPage('library', view)} />}
+                  {route.page === 'discover' && <Discover onOpen={openTitle} />}
+                  {route.page === 'library' && <Library onOpen={openTitle} initialView={libraryView} />}
+                </>
+              )}
             </div>
-          }
-        >
-          <div className="page-enter">
-            {info ? (
-              <InfoPage slug={info} onBack={() => setInfo(null)} />
-            ) : (
-              <>
-                {page === 'home' && (
-                  <Home
-                    onOpen={openTitle}
-                    onLibraryNavigate={(view) => {
-                      setLibraryView(view)
-                      goPage('library')
-                    }}
-                  />
-                )}
-                {page === 'discover' && <Discover onOpen={openTitle} />}
-                {page === 'library' && <Library onOpen={openTitle} initialView={libraryView} />}
-              </>
-            )}
-          </div>
-        </Suspense>
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
-      <Footer onInfo={setInfo} />
+      <footer className="cinema-footer">
+        <div className="cinema-footer-topbar">
+          <nav aria-label="Footer" className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            {FOOTER_LINKS.map((link) => (
+              <a
+                key={link.slug}
+                href={`#${link.slug}`}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return
+                  e.preventDefault()
+                  openInfo(link.slug)
+                }}
+                aria-current={route.info === link.slug ? 'page' : undefined}
+                className="press font-sans font-medium text-foreground transition-colors hover:text-[var(--primary)]"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
+          <span className="font-sans text-muted-foreground">© {new Date().getFullYear()} CineTrack</span>
+        </div>
+      </footer>
 
-      <Suspense fallback={null}>
-        {settingsMounted && <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
-        {open && (
-          <TitleDetail
-            key={`${open.type}-${open.id}`}
-            type={open.type}
-            id={open.id}
-            seed={open.seed}
-            onClose={() => setOpen(null)}
-            onOpenTitle={openTitle}
-          />
-        )}
-      </Suspense>
+      <ErrorBoundary inline label="overlay" resetKey={`${route.title?.type}:${route.title?.id}:${route.settings}`}>
+        <Suspense fallback={route.title ? <DrawerFallback /> : null}>
+          {(settingsMounted || route.settings) && <SettingsPanel open={route.settings} onClose={() => setSettingsOpen(false)} />}
+          {route.title && (
+            <TitleDetail
+              key={`${route.title.type}-${route.title.id}`}
+              type={route.title.type}
+              id={route.title.id}
+              seed={titleSeed}
+              onClose={closeTitle}
+              onOpenTitle={openTitle}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
     </div>
   )
 }
 
-function Footer({ onInfo }: { onInfo: (slug: InfoSlug) => void }) {
-  const openInfo = (slug: InfoSlug) => {
-    onInfo(slug)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
+/** Placeholder sheet while the title drawer's code downloads. */
+function DrawerFallback() {
   return (
-    <footer className="cinema-footer">
-      <div className="cinema-footer-topbar">
-        <nav aria-label="Footer navigation" className="flex items-center gap-6">
-          <button
-            type="button"
-            onClick={() => openInfo('privacy')}
-            className="press font-sans font-medium text-foreground transition-colors hover:text-[var(--primary)]"
-          >
-            Privacy
-          </button>
-          <button
-            type="button"
-            onClick={() => openInfo('terms')}
-            className="press font-sans font-medium text-foreground transition-colors hover:text-[var(--primary)]"
-          >
-            Terms
-          </button>
-          <button
-            type="button"
-            onClick={() => openInfo('about')}
-            className="press font-sans font-medium text-foreground transition-colors hover:text-[var(--primary)]"
-          >
-            About
-          </button>
-          <button
-            type="button"
-            onClick={() => openInfo('api')}
-            className="press font-sans font-medium text-foreground transition-colors hover:text-[var(--primary)]"
-          >
-            API
-          </button>
-        </nav>
-
-        <div>
-          <span className="font-sans text-muted-foreground">
-            © {new Date().getFullYear()} CineTrack
-          </span>
-        </div>
+    <div className="fixed inset-0 z-50 flex justify-end bg-[rgba(20,19,15,0.42)]" aria-hidden="true">
+      <div className="flex h-full w-full max-w-[920px] items-center justify-center border-l border-border bg-background">
+        <Spinner size={32} />
       </div>
-    </footer>
+    </div>
   )
 }

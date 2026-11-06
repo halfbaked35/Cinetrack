@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { ARCHIVE_NAME_MAX_LENGTH, DEFAULT_ARCHIVE_NAME, isValidHex, LANGUAGES, normalizeHex, THEMES, useSettings } from '../lib/settings'
+import { ARCHIVE_NAME_MAX_LENGTH, DEFAULT_ARCHIVE_NAME, importSettings, isValidHex, LANGUAGES, normalizeHex, settingsForBackup, THEMES, useSettings } from '../lib/settings'
 import type { StatusBadgePosition } from '../lib/settings'
-import { loggedEpisodeCount, MAX_LIBRARY_FILE_BYTES, minutesWatched, parseLibraryImport, useLibrary } from '../lib/library'
+import { buildBackup, entryKey, loggedEpisodeCount, MAX_LIBRARY_FILE_BYTES, minutesWatched, parseLibraryImport, useLibrary, useLibraryStatus } from '../lib/library'
 import { Chip, CloseButton, ConfirmDialog, SETTINGS_PANEL_ID, StatusBadge, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap } from './ui'
 import { useToast } from './Toast'
 import ThemeCustomizer from './ThemeCustomizer'
 
 export default function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { settings, set } = useSettings()
-  const { entries, replaceAll, clear } = useLibrary()
+  const { entries, replaceAll, importEntries, clear } = useLibrary()
+  const { hydrated } = useLibraryStatus()
   const { toast } = useToast()
   const [confirmWipe, setConfirmWipe] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -53,11 +54,11 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
 
   const exportLibrary = () => {
     try {
-      const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' })
+      const blob = new Blob([buildBackup(entries, settingsForBackup())], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `cinetrack-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.download = `cinetrack-backup-${new Date().toISOString().slice(0, 10)}.json`
       try {
         document.body.append(anchor)
         anchor.click()
@@ -66,28 +67,50 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
         // Let the browser start reading the Blob before releasing its URL.
         window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       }
-      toast('Shelf exported', 'success')
+      toast(`Backup of ${entries.length} title${entries.length === 1 ? '' : 's'} downloaded`, 'success')
     } catch {
-      toast('Export failed', 'error')
+      toast('Export failed — try again', 'error')
     }
   }
 
   const importLibrary = async (file: File) => {
+    if (!hydrated) {
+      toast('Your shelf is still loading — try again in a moment', 'warning')
+      return
+    }
     if (file.size > MAX_LIBRARY_FILE_BYTES) {
-      toast('File exceeds 80 MB limit', 'error')
+      toast('That file is larger than the 80 MB import limit', 'error')
       return
     }
     try {
       const text = await file.text()
-      const { merged, imported, skipped } = parseLibraryImport(text, entries)
-      replaceAll(merged)
-      toast(
-        `${imported} title${imported !== 1 ? 's' : ''} imported`,
-        skipped ? 'info' : 'success',
-      )
+      // Merge against the live shelf at commit time, not the `entries` this
+      // render saw: the shelf may have changed while the file was read.
+      const result = parseLibraryImport(text, [])
+      const { imported, combined } = importEntries(result.entries)
+      const restoredSettings = result.settings ? importSettings(result.settings) : false
+      const parts = [
+        `${imported} new title${imported === 1 ? '' : 's'}`,
+        combined ? `${combined} merged` : null,
+        result.skipped ? `${result.skipped} skipped` : null,
+        restoredSettings ? 'settings restored' : null,
+      ].filter(Boolean)
+      toast(`Imported: ${parts.join(', ')}`, result.skipped ? 'warning' : 'success')
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not read file', 'error')
+      toast(e instanceof Error ? e.message : 'That file could not be read', 'error')
     }
+  }
+
+  const eraseShelf = () => {
+    const erased = clear()
+    setConfirmWipe(false)
+    if (erased.length === 0) return
+    toast(`Erased ${erased.length} title${erased.length === 1 ? '' : 's'}`, 'warning', {
+      action: {
+        label: 'Undo',
+        onAction: () => replaceAll(Object.fromEntries(erased.map((entry) => [entryKey(entry.mediaType, entry.id), entry]))),
+      },
+    })
   }
 
   const counts = {
@@ -121,11 +144,12 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
         aria-modal="true"
         aria-label="Settings"
         inert={!open}
+        style={{ scrollPaddingTop: '4rem' }}
         className="drawer-sheet quiet-scroll fixed right-0 top-0 z-50 h-full w-full max-w-[420px] overflow-y-auto border-l border-border bg-background"
         data-open={shown}
       >
         <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
-          <span className="rule-label">Settings · Preferences</span>
+          <h2 className="rule-label">Settings</h2>
           <CloseButton onClick={onClose} label="Close settings" />
         </header>
 
@@ -186,10 +210,12 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
               <button
                 type="button"
                 onClick={() => setCustomizerOpen((v) => !v)}
+                aria-expanded={customizerOpen}
+                aria-controls="theme-customizer"
                 className="press flex w-full items-center justify-between border border-border bg-card px-3 py-2 text-left transition-colors hover:border-foreground"
               >
                 <span className="font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-foreground">
-                  Customize colors
+                  Customise colours
                 </span>
                 <span className="flex items-center gap-1.5 font-sans text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                   <span>{customizerOpen ? 'Hide' : 'Edit'}</span>
@@ -212,7 +238,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             </div>
 
             {customizerOpen && (
-              <div className="mt-3 border-t border-border pt-3">
+              <div id="theme-customizer" className="mt-3 border-t border-border pt-3">
                 <ThemeCustomizer />
               </div>
             )}
@@ -312,6 +338,18 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
           </Group>
 
           <Group title="Layout & display">
+            <Toggle
+              label="Compact density"
+              note="Smaller titles under posters and a denser default grid"
+              value={settings.density === 'compact'}
+              onChange={(v) => set('density', v ? 'compact' : 'comfortable')}
+            />
+            <Toggle
+              label="Poster motion"
+              note="Lift and zoom posters on hover"
+              value={settings.posterMotion}
+              onChange={(v) => set('posterMotion', v)}
+            />
             <Toggle
               label="Shortcut hints"
               value={settings.showNavHints}
@@ -580,7 +618,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
           <Group title="Library data">
             <div className="space-y-2">
               <div className="rule-label text-[10px]">Library overview</div>
-              <div className="grid grid-cols-3 gap-2 border border-border bg-card p-3">
+              <dl className="grid grid-cols-3 gap-2 border border-border bg-card p-3">
                 <div>
                   <dt className="rule-label text-[9px]">Films</dt>
                   <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{counts.movie}</dd>
@@ -605,30 +643,36 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
                   <dt className="rule-label text-[9px]">Days</dt>
                   <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{days}</dd>
                 </div>
-              </div>
+              </dl>
             </div>
 
             <div className="pt-3 border-t border-border">
-              <div className="rule-label mb-2 text-[10px]">Backup & restore</div>
+              <div className="rule-label mb-1 text-[10px]">Backup & restore</div>
+              <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
+                A backup holds your shelf and preferences. Restoring merges it into the current shelf; nothing is deleted.
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={exportLibrary}
                   className="press flex items-center justify-center border border-border bg-card py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-foreground hover:border-[var(--foreground)] hover:bg-background"
                 >
-                  Export JSON
+                  Export backup
                 </button>
                 <button
                   type="button"
+                  disabled={!hydrated}
                   onClick={() => fileRef.current?.click()}
                   className="press flex items-center justify-center border border-border bg-card py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-foreground hover:border-[var(--foreground)] hover:bg-background"
                 >
-                  Import JSON
+                  Restore backup
                 </button>
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="application/json"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  accept="application/json,.json"
                   className="hidden"
                   onChange={(event) => {
                     const file = event.target.files?.[0]
@@ -640,11 +684,12 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             </div>
 
             <div className="pt-3 border-t border-border">
-              <div className="rule-label mb-2 text-[10px] text-[var(--destructive)]">Danger Zone</div>
+              <div className="rule-label mb-2 text-[10px] text-[var(--destructive)]">Danger zone</div>
               <button
                 type="button"
+                disabled={!hydrated || entries.length === 0}
                 onClick={() => setConfirmWipe(true)}
-                className="press flex w-full items-center justify-center border border-[var(--destructive)] bg-[var(--destructive)] py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--destructive-foreground)] hover:opacity-90"
+                className="press flex w-full items-center justify-center border border-[var(--destructive)] bg-[var(--destructive)] py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--destructive-foreground)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Erase entire shelf
               </button>
@@ -654,19 +699,16 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
 
         <ConfirmDialog
           open={confirmWipe}
-          title="Erase Entire Archive"
+          title="Erase entire shelf?"
           message={
             <span>
-              This will permanently delete all <strong>{entries.length}</strong> titles and logged episodes from your local database.
-              Export a JSON copy first if you want to preserve your records.
+              This deletes all <strong>{entries.length}</strong> titles, ratings and logged episodes from your local database.
+              You can undo right afterwards; to keep a copy, export a backup first.
             </span>
           }
-          confirmLabel="Erase all records"
+          confirmLabel="Erase shelf"
           onCancel={() => setConfirmWipe(false)}
-          onConfirm={() => {
-            clear()
-            setConfirmWipe(false)
-          }}
+          onConfirm={eraseShelf}
         />
       </aside>
     </>
@@ -703,6 +745,7 @@ function Toggle({
 }) {
   return (
     <button
+      type="button"
       role="switch"
       aria-checked={value}
       onClick={() => onChange(!value)}
@@ -714,12 +757,12 @@ function Toggle({
       </span>
       <span
         className={`relative box-border block h-5 w-10 shrink-0 border transition-colors ${
-          value ? 'border-[var(--primary)] bg-[var(--primary)]' : 'border-border bg-secondary'
+          value ? 'border-[var(--primary)] bg-[var(--primary)]' : 'border-[var(--input)] bg-secondary'
         }`}
       >
         <span
           className={`absolute left-0 top-[2px] block h-[14px] w-[14px] transition-transform duration-200 ${
-            value ? 'translate-x-[22px] bg-[var(--primary-foreground)]' : 'translate-x-[2px] bg-background'
+            value ? 'translate-x-[22px] bg-[var(--primary-foreground)]' : 'translate-x-[2px] bg-[var(--muted-foreground)]'
           }`}
         />
       </span>
@@ -813,25 +856,30 @@ function OptionsRow<T extends string>({
 
 function EpisodeColorHexInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const [text, setText] = useState(value)
+  const [editing, setEditing] = useState(false)
 
+  // Follow outside changes, but never overwrite what is being typed.
   useEffect(() => {
-    setText(value)
-  }, [value])
+    if (!editing) setText(value)
+  }, [value, editing])
 
   return (
     <input
       type="text"
       value={text}
+      onFocus={() => setEditing(true)}
       onChange={(e) => {
         const next = e.target.value
         setText(next)
-        if (isValidHex(next)) onChange(normalizeHex(next))
+        // Only a complete six-digit value applies live; "#abc" waits for blur.
+        if (/^#?[0-9a-f]{6}$/i.test(next.trim())) onChange(normalizeHex(next))
       }}
       onBlur={() => {
+        setEditing(false)
         if (isValidHex(text)) {
           const normalized = normalizeHex(text)
           setText(normalized)
-          onChange(normalized)
+          if (normalized !== value) onChange(normalized)
         } else {
           setText(value)
         }

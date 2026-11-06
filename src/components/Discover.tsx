@@ -10,7 +10,7 @@ import {
   type TmdbTitle,
 } from '../lib/tmdb'
 import { useLibrary } from '../lib/library'
-import { useSettings } from '../lib/settings'
+import { useSettings, useSettingsHydrated } from '../lib/settings'
 import { Chip, Empty, Poster, PosterGrid, PosterSkeleton, SearchInput, SectionHead, ShuffleIcon, Spinner } from './ui'
 
 type Mode = 'suggested' | 'trending' | 'movie' | 'tv'
@@ -93,7 +93,7 @@ function BrowseOptionsDropdown({
       {open && (
         <div
           id="discover-browse-options"
-          role="dialog"
+          role="group"
           aria-label="Discover options"
           className="quiet-scroll animate-[ct-tick_180ms_var(--ease-sheet)_both] absolute right-0 top-[calc(100%+6px)] z-50 max-h-[min(70vh,460px)] w-[320px] max-w-[calc(100vw-32px)] origin-top-right overflow-y-auto border border-border bg-background p-4 shadow-[0_16px_48px_rgba(0,0,0,0.35)] sm:w-[380px]"
         >
@@ -374,15 +374,18 @@ function ShelfRow({
     <section aria-label={shelf.title} aria-busy={busy}>
       <div className="relative z-20 mb-4 flex items-end justify-between gap-4 border-b border-border pb-2">
         <div className="min-w-0">
-          <h3 className="font-display truncate text-[22px]">{shelf.title}</h3>
+          <h2 className="font-display truncate text-[22px]">{shelf.title}</h2>
           {shelf.note && <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{shelf.note}</p>}
         </div>
         <button
           type="button"
-          onClick={shuffle}
-          disabled={busy}
+          onClick={() => {
+            if (!busy) shuffle()
+          }}
+          // aria-disabled, not disabled: disabling the focused button would drop focus to <body>.
+          aria-disabled={busy || undefined}
           aria-label={`Shuffle ${shelf.title} suggestions`}
-          className="press relative z-30 inline-flex shrink-0 items-center gap-1.5 border border-border bg-background px-3 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground hover:border-[var(--foreground)] hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+          className="press relative z-30 inline-flex shrink-0 items-center gap-1.5 border border-border bg-background px-3 py-1.5 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground hover:border-[var(--foreground)] hover:text-foreground aria-disabled:cursor-wait aria-disabled:opacity-60"
         >
           <ShuffleIcon className={`size-4 ${busy ? 'animate-spin' : ''}`} />
           Shuffle
@@ -418,9 +421,26 @@ function ShelfRow({
 }
 
 
+/**
+ * True once saved preferences (language, adult filter) have loaded, or after a
+ * short grace period if they can't be — so the first fetch isn't thrown away
+ * and repeated in a different language a moment later.
+ */
+function useSettingsReady(graceMs = 1500) {
+  const hydrated = useSettingsHydrated()
+  const [timedOut, setTimedOut] = useState(false)
+  useEffect(() => {
+    if (hydrated) return
+    const timer = window.setTimeout(() => setTimedOut(true), graceMs)
+    return () => window.clearTimeout(timer)
+  }, [hydrated, graceMs])
+  return hydrated || timedOut
+}
+
 export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number, seed?: TmdbTitle) => void }) {
   const { entries, get } = useLibrary()
   const { settings } = useSettings()
+  const settingsReady = useSettingsReady()
   const [mode, setMode] = useState<Mode>('trending')
   const [sort, setSort] = useState('popularity.desc')
   const [genre, setGenre] = useState<number | null>(null)
@@ -477,6 +497,8 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   )
   const seedsRef = useRef(seeds)
   useEffect(() => { seedsRef.current = seeds }, [seeds])
+  /** Only the top three seeds feed the shelves; refresh when those change, not on every edit. */
+  const topSeedSig = seedSig.split(',').slice(0, 3).join(',')
 
   // Debounce search input
   useEffect(() => {
@@ -486,7 +508,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
 
   // Load genres for movie/tv and trending modes — use live flag to avoid stale set
   useEffect(() => {
-    if (mode !== 'movie' && mode !== 'tv' && mode !== 'trending') return
+    if (!settingsReady || (mode !== 'movie' && mode !== 'tv' && mode !== 'trending')) return
     const controller = new AbortController()
     let live = true
     genreList(type, { signal: controller.signal })
@@ -496,7 +518,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
       live = false
       controller.abort()
     }
-  }, [mode, type, settings.metadataLanguage])
+  }, [mode, type, settings.metadataLanguage, settingsReady])
 
   const shelfToken = useRef(0)
   // Plates on screen per shelf, shared so a shuffle never repeats one across categories.
@@ -505,14 +527,14 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   // For You shelves: per-seed picks + genre exploration + trending, assembled in parallel.
   // Seeds drive the personal rows; genre rows deliberately reach beyond the library.
   useEffect(() => {
-    if (gridActive) return
+    if (gridActive || !settingsReady) return
     const controller = new AbortController()
     let live = true
     const token = ++shelfToken.current
     setShelvesLoading(true)
     setShelvesError(null)
-    setShelves([])
-    const sig = seedSig
+    // Current shelves stay on screen until the new set is ready.
+    const sig = topSeedSig
     ;(async () => {
       try {
         const topSeeds = seedsRef.current.slice(0, 3)
@@ -634,7 +656,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
       live = false
       controller.abort()
     }
-  }, [gridActive, seedSig, settings.includeAdult, settings.metadataLanguage, shelfRetry])
+  }, [gridActive, settingsReady, topSeedSig, settings.includeAdult, settings.metadataLanguage, shelfRetry])
 
   /** One page of whichever feed is active. Suggestions walk the seed list. */
   const fetchPage = useCallback(
@@ -670,11 +692,14 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   loadingRef.current = loading
   const errorRef = useRef(error)
   errorRef.current = error
+  // Trending's sort and genre only reorder/filter loaded pages client-side, so
+  // they stay out of the feed identity (changing them used to discard pages).
+  const serverSideOptions = !searching && mode !== 'trending'
   const feedKey = JSON.stringify([
     mode,
     searching ? debounced : '',
-    searching ? null : sort,
-    searching ? null : genre,
+    serverSideOptions ? sort : null,
+    serverSideOptions ? genre : null,
     settings.includeAdult,
     settings.metadataLanguage,
   ])
@@ -761,6 +786,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
   // Note: seedsRef is intentionally NOT a dep — adding a library item shouldn't wipe the grid
   // Shelved For You has its own fetch path — the grid stays idle there
   useEffect(() => {
+    if (!settingsReady) return
     feedControllerRef.current?.abort()
     const token = ++feedToken.current
     errorRef.current = null
@@ -803,7 +829,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
       if (feedToken.current === token) feedToken.current += 1
       feedControllerRef.current?.abort()
     }
-  }, [feedKey, gridActive, requestPage])
+  }, [feedKey, gridActive, requestPage, settingsReady])
 
   const loadMoreRef = useRef<() => void>(() => {})
   const loadMore = useCallback(() => {
@@ -869,29 +895,34 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
               sortOptions={mode === 'trending' ? SORTS.filter((option) => option.id !== 'revenue.desc') : SORTS}
             />
           )}
-          <SearchInput value={query} onChange={setQuery} className="w-64 md:w-96" />
+          <SearchInput value={query} onChange={setQuery} label="Search films and series on TMDb" placeholder="Search films and series…" className="w-full sm:w-64 md:w-96" />
         </div>
       </div>
 
       {searching && (
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2">
-          <h3 className="font-display text-[22px]">{`Search — "${debounced}"`}</h3>
+          <h2 className="font-display text-[22px]">{`Search — “${debounced}”`}</h2>
         </div>
       )}
-      {!gridActive && shelvesLoading && (
-        <span className="rule-label" aria-live="polite">loading…</span>
+      {!gridActive && shelvesLoading && shelves.length > 0 && (
+        <span className="rule-label">Refreshing suggestions…</span>
       )}
-      {gridActive && (
-        <span className="sr-only" role="status" aria-live="polite">
-          {gridLoading ? (displayResults.length ? 'Loading more titles' : 'Loading titles') : ''}
-        </span>
-      )}
+      <span className="sr-only" role="status" aria-live="polite">
+        {gridActive
+          ? gridLoading
+            ? displayResults.length ? 'Loading more titles' : 'Loading titles'
+            : searching && !displayError
+              ? `${visibleResults.length} result${visibleResults.length === 1 ? '' : 's'} for ${debounced}`
+              : ''
+          : shelvesLoading ? 'Loading suggestions' : ''}
+      </span>
       {!gridActive ? (
         <>
           {shelvesError && (
             <div role="alert" className="animate-fade flex items-center justify-between gap-4 border border-[var(--primary)]/20 bg-[var(--primary)]/5 px-4 py-3">
               <p className="font-sans text-[12px] text-[var(--primary)]">{shelvesError}</p>
               <button
+                type="button"
                 onClick={() => setShelfRetry((n) => n + 1)}
                 className="press shrink-0 border border-[var(--primary)] bg-[var(--primary)] px-3 py-1 font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-primary-foreground hover:opacity-90"
               >
@@ -928,7 +959,15 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
               </button>
             </div>
           )}
-          {!gridLoading && !displayError && visibleResults.length === 0 && <Empty>{mode === 'trending' && genre !== null ? 'No trending titles match this genre' : 'No records match — try a different search or clear filters'}</Empty>}
+          {!gridLoading && !displayError && visibleResults.length === 0 && (
+            <Empty>
+              {mode === 'trending' && genre !== null
+                ? 'No trending titles match this genre'
+                : searching
+                  ? `No films or series found for “${debounced}”`
+                  : 'No titles match — try a different sort or genre'}
+            </Empty>
+          )}
 
           <div aria-busy={gridLoading}>
             {showGridSkeletons && displayResults.length === 0 && !displayError && (

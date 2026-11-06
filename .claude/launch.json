@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cinetrack-isolated",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "CINETRACK_DATA_DIR=/private/tmp/claude-501/-Users-armaan-Downloads-code-projects-cinetrack/1482df06-b45f-4491-aa00-925696dec2ce/scratchpad/data-test",
+        "PORT=8501",
+        "npx",
+        "vite"
+      ],
+      "port": 8501
+    }
+  ]
+}

@@ -11,8 +11,8 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { img, titleOf, yearOf, type MediaType, type TmdbTitle } from '../lib/tmdb'
-import { progress, useLibrary, type Entry, type Status } from '../lib/library'
-import { useSettings } from '../lib/settings'
+import { isLibraryHydrated, progress, useLibrary, type Entry, type Status } from '../lib/library'
+import { useSetting } from '../lib/settings'
 import { useToast } from './Toast'
 
 /** CineTrack brand marks. */
@@ -124,11 +124,11 @@ export const STATUS_STYLE: Record<Status, string> = {
 
 export const STATUS_INACTIVE: Record<Status, string> = {
   planned:
-    'border border-[var(--status-planned)]/30 bg-[var(--status-planned)]/[0.06] text-[var(--status-planned)] hover:bg-[var(--status-planned)] hover:text-[var(--status-planned-foreground)] hover:border-[var(--status-planned)]',
+    'border border-[var(--status-planned)]/30 bg-[var(--status-planned)]/[0.06] text-[var(--status-planned-ink)] hover:bg-[var(--status-planned)] hover:text-[var(--status-planned-foreground)] hover:border-[var(--status-planned)]',
   watching:
-    'border border-[var(--status-watching)]/30 bg-[var(--status-watching)]/[0.06] text-[var(--status-watching)] hover:bg-[var(--status-watching)] hover:text-[var(--status-watching-foreground)] hover:border-[var(--status-watching)]',
+    'border border-[var(--status-watching)]/30 bg-[var(--status-watching)]/[0.06] text-[var(--status-watching-ink)] hover:bg-[var(--status-watching)] hover:text-[var(--status-watching-foreground)] hover:border-[var(--status-watching)]',
   watched:
-    'border border-[var(--status-watched)]/30 bg-[var(--status-watched)]/[0.06] text-[var(--status-watched)] hover:bg-[var(--status-watched)] hover:text-[var(--status-watched-foreground)] hover:border-[var(--status-watched)]',
+    'border border-[var(--status-watched)]/30 bg-[var(--status-watched)]/[0.06] text-[var(--status-watched-ink)] hover:bg-[var(--status-watched)] hover:text-[var(--status-watched-foreground)] hover:border-[var(--status-watched)]',
   dropped:
     'border border-border bg-muted/20 text-muted-foreground hover:bg-muted hover:text-foreground',
 }
@@ -138,6 +138,14 @@ export const STATUS_DOT_CLASS: Record<Status, string> = {
   watching: 'bg-[var(--status-watching)]',
   watched: 'bg-[var(--status-watched)]',
   dropped: 'bg-muted-foreground',
+}
+
+/** Text/icon colour that stays legible on each status fill, in every theme. */
+const STATUS_TEXT_ON: Record<Status, string> = {
+  planned: 'text-[var(--status-planned-foreground)]',
+  watching: 'text-[var(--status-watching-foreground)]',
+  watched: 'text-[var(--status-watched-foreground)]',
+  dropped: 'text-[var(--background)]',
 }
 
 /** Per-status colour so a shelf reads at a glance with minimalist colored circles. */
@@ -206,21 +214,25 @@ export function StatusBadge({
   showIcon?: boolean
   shadow?: boolean
 }) {
-  const { settings } = useSettings()
+  const shapeSetting = useSetting('statusBadgeShape')
+  const sizeSetting = useSetting('statusBadgeSize')
+  const iconSetting = useSetting('statusBadgeIcon')
+  const shadowSetting = useSetting('statusBadgeShadow')
+  const roundPosters = useSetting('roundPosters')
   const s = STATUS_BADGE[status] ?? STATUS_BADGE.planned
   const dotColor = s.dot ?? STATUS_DOT_CLASS[status] ?? STATUS_DOT_CLASS.planned
 
-  const currentShape = shape ?? settings?.statusBadgeShape ?? 'circle'
-  const currentSize = size ?? settings?.statusBadgeSize ?? 'large'
-  const currentShowIcon = showIcon ?? settings?.statusBadgeIcon ?? false
-  const currentShadow = shadow ?? settings?.statusBadgeShadow ?? true
+  const currentShape = shape ?? shapeSetting
+  const currentSize = size ?? sizeSetting
+  const currentShowIcon = showIcon ?? iconSetting
+  const currentShadow = shadow ?? shadowSetting
 
   const shadowClass = currentShadow ? 'shadow-[0_2px_8px_rgba(0,0,0,0.35)]' : 'shadow-none'
 
   const labelText = rewatching ? 'Rewatching' : s.label
 
   if (currentShape === 'text') {
-    const textRounding = settings?.roundPosters ? 'rounded-[4px]' : 'rounded-none'
+    const textRounding = roundPosters ? 'rounded-[4px]' : 'rounded-none'
     const textSizeClass =
       currentSize === 'small'
         ? 'text-[8px] px-1.5 py-0.5 tracking-[0.08em] gap-1'
@@ -235,7 +247,7 @@ export function StatusBadge({
           ? 'h-2.5 w-2.5'
           : 'h-3 w-3'
 
-    const textBg = rewatching ? 'bg-[var(--primary)] text-white' : `${dotColor} text-white`
+    const textBg = rewatching ? 'bg-[var(--primary)] text-primary-foreground' : `${dotColor} ${STATUS_TEXT_ON[status]}`
 
     return (
       <span
@@ -278,7 +290,7 @@ export function StatusBadge({
       role="img"
       title={s.label}
       aria-label={`${s.label}${rewatching ? ' · Rewatching' : ''}`}
-      className={`relative flex items-center justify-center shrink-0 text-white ${shadowClass} ${shapeClass} ${sizeClass} ${dotColor} ${
+      className={`relative flex items-center justify-center shrink-0 ${STATUS_TEXT_ON[status]} ${shadowClass} ${shapeClass} ${sizeClass} ${dotColor} ${
         rewatching ? `ring-2 ring-[var(--primary)] ${ringOffsetClass} ring-offset-black/50` : ''
       }`}
     >
@@ -488,8 +500,10 @@ export function CarouselNav({
   )
 }
 
-/** How long a requested poster may stay unresolved before trying its fallback. */
-const ART_GRACE_MS = 3000
+/** TMDb results omit media_type on single-type endpoints; titles have `title`, series `name`. */
+export function mediaTypeOf(item: Pick<TmdbTitle, 'media_type' | 'title'>): MediaType {
+  return item.media_type ?? (item.title ? 'movie' : 'tv')
+}
 
 /** Poster art with viewport-aware loading and a smaller-image fallback. */
 export function usePosterArt(
@@ -547,18 +561,9 @@ export function usePosterArt(
     setStatus('loading')
   }, [fallbackSrc, url, usingFallback])
 
-  // Bound the wait only after the image has actually been scheduled. A slow or
-  // missing primary image switches to a smaller poster instead of retrying the
-  // same URL with a cache-busting query that can bypass the CDN cache.
-  useEffect(() => {
-    if (!shouldLoad || !source || status !== 'loading') return
-    const timer = window.setTimeout(() => {
-      if (elRef.current?.complete && elRef.current.naturalWidth > 0) setStatus('ready')
-      else failover()
-    }, ART_GRACE_MS)
-    return () => window.clearTimeout(timer)
-  }, [shouldLoad, source, status, failover])
-
+  // A slow image keeps loading (the shimmer stays up); only a real load error
+  // switches to the fallback. A timer-based switch aborted in-flight downloads
+  // and left slow connections with permanent "Poster unavailable" plates.
   // Cached images can finish before the state-reset effect above runs. Check
   // the committed element once the browser has applied its new source so that
   // those posters settle immediately instead of showing a stale loader.
@@ -674,32 +679,41 @@ export const Poster = memo(function Poster({
   eager?: boolean
   movieLabel?: string
 }) {
-  const { settings } = useSettings()
+  // Per-key subscriptions: a change to an unrelated setting (typing the
+  // archive name, dragging a colour) must not re-render every poster.
+  const posterQuality = useSetting('posterQuality')
+  const density = useSetting('density')
+  const showCommunityScores = useSetting('showCommunityScores')
+  const statusBadgePosition = useSetting('statusBadgePosition')
+  const posterMotion = useSetting('posterMotion')
+  const defaultStatus = useSetting('defaultStatus')
+  const openAfterAdd = useSetting('openAfterAdd')
   // Posters receive their entry from the shelf parent. Avoid subscribing each
   // individual card to the whole store; one shelf-level subscription is enough.
   const { upsert } = useLibrary(false)
   const { toast } = useToast()
-  const type: MediaType = (item.media_type ?? (item.title ? 'movie' : 'tv')) as MediaType
-  const saver = settings.posterQuality === 'saver'
+  const type: MediaType = mediaTypeOf(item)
+  const saver = posterQuality === 'saver'
   const customPoster = entry?.customPoster ?? null
   const src = customPoster ?? img(item.poster_path, saver ? 'w185' : 'w342')
   const srcSet = customPoster ? undefined : saver
     ? `${img(item.poster_path, 'w185')} 185w`
     : `${img(item.poster_path, 'w185')} 185w, ${img(item.poster_path, 'w342')} 342w, ${img(item.poster_path, 'w500')} 500w`
-  const compact = settings.density === 'compact'
+  const compact = density === 'compact'
   const pct = entry ? progress(entry) : 0
   const community =
-    settings.showCommunityScores && item.vote_average > 0 ? item.vote_average.toFixed(1) : null
+    showCommunityScores && item.vote_average > 0 ? item.vote_average.toFixed(1) : null
   const badgePositionClass = {
     'top-left': 'left-2.5 top-2.5',
     'top-right': 'right-2.5 top-2.5',
     'bottom-left': 'bottom-2.5 left-2.5',
     'bottom-right': 'bottom-2.5 right-2.5',
-  }[settings.statusBadgePosition]
+  }[statusBadgePosition]
 
   const art = usePosterArt(src, srcSet || undefined, {
     lazy: !eager,
-    fallbackSrc: img(item.poster_path, saver ? 'w342' : 'w185'),
+    // Custom posters fall back to the TMDb art; TMDb art to a smaller size.
+    fallbackSrc: customPoster ? img(item.poster_path, 'w342') : saver ? null : img(item.poster_path, 'w185'),
   })
   const artPending = art.status === 'loading' && (!art.lazy || art.shouldLoad)
   const [showArtLoader, setShowArtLoader] = useState(false)
@@ -731,8 +745,8 @@ export const Poster = memo(function Poster({
         <button
           type="button"
           onClick={() => onOpen(type, item.id, item)}
-          aria-label={`Open ${titleOf(item)}${art.status === 'failed' ? ' — poster unavailable' : ''}`}
-          className="absolute inset-0 h-full w-full cursor-pointer press"
+          aria-label={`${titleOf(item)}${yearOf(item) ? ` (${yearOf(item)})` : ''}${entry ? `, ${entry.rewatching ? 'rewatching' : STATUS_BADGE[entry.status].label.toLowerCase()}` : ''}`}
+          className="absolute inset-0 h-full w-full cursor-pointer press focus-visible:outline-offset-[-3px]"
         >
           {art.hasArt && art.status !== 'failed' ? (
             <img
@@ -749,7 +763,7 @@ export const Poster = memo(function Poster({
               onError={art.onError}
               className={`h-full w-full object-cover transition-all duration-500 ease-out ${
                 art.status === 'ready' ? 'opacity-100' : 'opacity-0'
-              } ${settings.posterMotion ? 'group-hover:scale-[1.03]' : ''} group-hover:brightness-110 group-hover:saturate-110`}
+              } ${posterMotion ? 'group-hover:scale-[1.03]' : ''} group-hover:brightness-110 group-hover:saturate-110`}
             />
           ) : (
             <div aria-hidden="true" className="flex h-full items-center justify-center p-3 text-center font-sans text-xs text-muted-foreground">
@@ -769,20 +783,13 @@ export const Poster = memo(function Poster({
               title="Add to shelf"
               onClick={(e) => {
                 e.stopPropagation()
-                try {
-                  upsert(type, item.id, {
-                    title: titleOf(item),
-                    poster: item.poster_path,
-                    year: yearOf(item),
-                    status: settings.defaultStatus,
-                    totalEpisodes: (item as unknown as { number_of_episodes?: number | null }).number_of_episodes ?? null,
-                  })
-                  toast(`${titleOf(item)} added`, 'success')
-                  if (settings.openAfterAdd) onOpen(type, item.id, item)
-                } catch (err) {
-                  console.error(err)
-                  toast('Failed to add — retry', 'error')
+                if (!isLibraryHydrated()) {
+                  toast('Your shelf is still loading — try again in a moment', 'warning')
+                  return
                 }
+                upsert(type, item.id, { title: titleOf(item), poster: item.poster_path, year: yearOf(item), status: defaultStatus })
+                toast(`${titleOf(item)} added to your shelf`, 'success')
+                if (openAfterAdd) onOpen(type, item.id, item)
               }}
               className="press flex h-6 w-6 cursor-pointer items-center justify-center bg-[var(--primary)] text-primary-foreground opacity-0 shadow-md transition-all duration-200 hover:scale-110 hover:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             >
@@ -812,8 +819,12 @@ export const Poster = memo(function Poster({
         )}
       </div>
       <div className="poster-card-3d__meta">
+        {/* Duplicate of the poster button for pointer users; kept out of the tab
+            order and the accessibility tree so each card is one stop. */}
         <button
           type="button"
+          tabIndex={-1}
+          aria-hidden="true"
           onClick={() => onOpen(type, item.id, item)}
           className="mt-2 flex w-full items-baseline justify-between gap-2 text-left"
         >
@@ -865,8 +876,8 @@ export function PosterGrid({
   columns?: number
   className?: string
 }) {
-  const { settings } = useSettings()
-  const cols = columns ?? (settings.density === 'compact' ? 8 : 6)
+  const density = useSetting('density')
+  const cols = columns ?? (density === 'compact' ? 8 : 6)
 
   return (
     <div
@@ -886,12 +897,15 @@ export function PosterGrid({
 export function SearchInput({
   value,
   onChange,
-  placeholder = 'SEARCH…',
+  label,
+  placeholder = 'Search…',
   className,
   autoFocus,
 }: {
   value: string
   onChange: (v: string) => void
+  /** Accessible name, e.g. "Search your shelf". */
+  label: string
   placeholder?: string
   className?: string
   autoFocus?: boolean
@@ -919,20 +933,29 @@ export function SearchInput({
   return (
     <div
       className={`group flex h-9 items-center gap-2.5 border bg-background px-3 transition-colors duration-200 ${
-        focused ? 'border-[var(--primary)]' : 'border-border hover:border-[var(--foreground)]/20'
+        focused ? 'border-[var(--foreground)] ring-1 ring-[var(--foreground)]' : 'border-[var(--input)] hover:border-[var(--foreground)]'
       } ${className ?? ''}`}
     >
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5 shrink-0 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </svg>
       <input
         ref={inputRef}
+        type="search"
+        enterKeyHint="search"
+        autoComplete="off"
+        spellCheck={false}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        aria-label={placeholder}
+        aria-label={label}
+        aria-keyshortcuts="Control+K Meta+K"
         style={{ outline: 'none', boxShadow: 'none' }}
-        className="min-w-0 flex-1 bg-transparent font-sans text-[13px] tracking-[0.01em] !outline-none focus:!outline-none focus-visible:!outline-none focus:ring-0 focus-visible:ring-0 placeholder:text-muted-foreground/60"
+        className="min-w-0 flex-1 bg-transparent font-sans text-[16px] tracking-[0.01em] !outline-none focus:!outline-none focus-visible:!outline-none focus:ring-0 focus-visible:ring-0 placeholder:text-muted-foreground sm:text-[13px] [&::-webkit-search-cancel-button]:hidden"
       />
       {value ? (
         <button
@@ -973,7 +996,12 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) 
     if (!active) return
     const el = ref.current
     if (!el || typeof document === 'undefined') return
-    const prev = document.activeElement as HTMLElement | null
+    const prev = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+      ? document.activeElement
+      : null
+    // When the trap opened from nowhere focusable (or the opener is removed),
+    // return focus to the nearest enclosing dialog instead of <body>.
+    const fallback = el.parentElement?.closest<HTMLElement>('[role="dialog"], [role="alertdialog"]') ?? null
     const isVisible = (n: HTMLElement) => {
       if (n.hasAttribute('disabled')) return false
       if (n.closest('[hidden]')) return false
@@ -1021,10 +1049,13 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) 
     el.addEventListener('keydown', onKey)
     return () => {
       el.removeEventListener('keydown', onKey)
+      const target = prev?.isConnected ? prev : fallback?.isConnected ? fallback : null
+      if (!target) return
+      if (target === fallback && !target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1')
       try {
-        prev?.focus?.({ preventScroll: true })
+        target.focus({ preventScroll: true })
       } catch {
-        prev?.focus?.()
+        target.focus()
       }
     }
   }, [ref, active])
@@ -1037,16 +1068,18 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) 
  */
 export function useTimedTooltip() {
   const [visible, setVisible] = useState(false)
-  const show = useCallback(() => {
-    setVisible(true)
-  }, [])
-  const scheduleHide = useCallback(() => {
-    setVisible(false)
-  }, [])
-  const hide = useCallback(() => {
-    setVisible(false)
-  }, [])
-  return { visible, show, scheduleHide, hide }
+  const show = useCallback(() => setVisible(true), [])
+  const hide = useCallback(() => setVisible(false), [])
+  // WCAG 1.4.13: a tooltip must be dismissible without moving the pointer.
+  useEffect(() => {
+    if (!visible) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setVisible(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [visible])
+  return { visible, show, hide }
 }
 
 export function Spinner({ size = 32, className = '' }: { size?: number; className?: string }) {
@@ -1094,7 +1127,9 @@ export function ConfirmDialog({
   onCancel: () => void
 }) {
   const [shown, setShown] = useState(false)
-  const [leaving, setLeaving] = useState(false)
+  // Start "left" when closed so a closed dialog never mounts a hidden
+  // alertdialog that screen readers can still find.
+  const [leaving, setLeaving] = useState(!open)
   const boxRef = useRef<HTMLDivElement | null>(null)
   // Two confirms can coexist (e.g. the editor's reset + discard prompts), so
   // ids must be unique per instance rather than hard-coded.
