@@ -30,14 +30,17 @@ const OPTIONS: { id: ThemePreference; label: string; icon: ReactNode }[] = [
   },
 ]
 
-/** Light / Dark / System segmented toggle. System follows the OS live. */
+/**
+ * Light / Dark / System as a compact icon switcher. The chosen option sits on
+ * a raised neutral chip; names show as tooltips and to screen readers.
+ */
 export default function ThemeToggle({ value, onChange }: { value: ThemePreference; onChange: (value: ThemePreference) => void }) {
   return (
     <div
       role="radiogroup"
       aria-label="Theme"
       onKeyDown={handleRadioGroupKeyDown}
-      className="grid grid-cols-3 border border-border bg-muted p-0.5"
+      className="inline-flex items-center gap-0.5 border border-border bg-muted p-0.5"
     >
       {OPTIONS.map((option) => {
         const active = value === option.id
@@ -47,16 +50,19 @@ export default function ThemeToggle({ value, onChange }: { value: ThemePreferenc
             type="button"
             role="radio"
             aria-checked={active}
+            aria-label={option.label}
+            title={option.label}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(option.id)}
-            className={`press flex h-9 items-center justify-center gap-2 font-sans text-[10px] font-medium uppercase tracking-[0.12em] transition-colors focus-visible:outline-offset-[-2px] ${
-              active ? 'bg-[var(--primary)] text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+            className={`press flex size-7 items-center justify-center transition-colors focus-visible:outline-offset-[-2px] ${
+              active
+                ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] ring-1 ring-border'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {option.icon}
             </svg>
-            {option.label}
           </button>
         )
       })}

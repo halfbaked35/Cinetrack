@@ -64,6 +64,8 @@ const RATING_OPTIONS = [
 ] as const
 
 export type LibrarySort = (typeof SORTS)[number]['id']
+/** The library opens sorted by most recently added. */
+const DEFAULT_SORT: LibrarySort = 'added'
 
 export function applyLibraryFilters(
   pool: Entry[],
@@ -106,23 +108,18 @@ export default function Library({
   const { entries } = useLibrary()
   const { hydrated } = useLibraryStatus()
   const { settings } = useSettings()
-  const [tab, setTab] = useState<Tab>(() => initialView?.tab ?? settings.defaultLibraryTab)
+  const [tab, setTab] = useState<Tab>(() => initialView?.tab ?? 'all')
   const [filter, setFilter] = useState<LibraryFilter>(() => initialView?.filter ?? 'all')
-  const [sort, setSort] = useState<(typeof SORTS)[number]['id']>(settings.defaultSort)
+  const [sort, setSort] = useState<(typeof SORTS)[number]['id']>(DEFAULT_SORT)
   const [minRating, setMinRating] = useState<(typeof RATING_OPTIONS)[number]['id']>(0)
   const [q, setQ] = useState('')
 
   useEffect(() => {
-    setTab(initialView?.tab ?? settings.defaultLibraryTab)
+    setTab(initialView?.tab ?? 'all')
     setFilter(initialView?.filter ?? 'all')
     setMinRating(0)
     setQ('')
-  }, [initialView, settings.defaultLibraryTab])
-
-  // Saved preferences can arrive after the first render (deep link to #library).
-  useEffect(() => {
-    setSort(settings.defaultSort)
-  }, [settings.defaultSort])
+  }, [initialView])
 
   const pool = useMemo(() => {
     if (tab === 'favorites') return entries.filter((e) => e.favorite)
@@ -241,7 +238,7 @@ export default function Library({
             onClick={() => {
               setTab('all')
               setFilter('all')
-              setSort(settings.defaultSort)
+              setSort(DEFAULT_SORT)
               setMinRating(0)
               setQ('')
             }}
@@ -291,7 +288,6 @@ function FilterBar({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const boxRef = useRef<HTMLDivElement | null>(null)
   const leaveTimer = useRef<number | null>(null)
-  const { settings } = useSettings()
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current
@@ -366,8 +362,8 @@ function FilterBar({
     return undefined
   }, [open, updatePosition])
 
-  const active = filter !== 'all' || sort !== settings.defaultSort || minRating > 0
-  const activeCount = (filter !== 'all' ? 1 : 0) + (sort !== settings.defaultSort ? 1 : 0) + (minRating > 0 ? 1 : 0)
+  const active = filter !== 'all' || sort !== DEFAULT_SORT || minRating > 0
+  const activeCount = (filter !== 'all' ? 1 : 0) + (sort !== DEFAULT_SORT ? 1 : 0) + (minRating > 0 ? 1 : 0)
   const sortLabel = SORTS.find((s) => s.id === sort)?.label
 
   const popover = (
@@ -444,7 +440,7 @@ function FilterBar({
           type="button"
           onClick={() => {
             onFilter('all')
-            onSort(settings.defaultSort)
+            onSort(DEFAULT_SORT)
             onMinRating(0)
             triggerRef.current?.focus()
           }}

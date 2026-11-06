@@ -4,34 +4,54 @@ import assert from 'node:assert/strict'
 // No local API under the test runner: settings load fails fast and retries quietly.
 globalThis.fetch = (async () => new Response('offline', { status: 503 })) as typeof fetch
 
-const { currentSettings, importSettings, settingsForBackup } = await import('../src/lib/settings.ts')
+const { importSettings, settingsForBackup } = await import('../src/lib/settings.ts')
 
-describe('renamed settings keys', () => {
-  it('reads values saved under the pre-rename keys', () => {
-    assert.equal(importSettings({ defaultShelfTab: 'tv', shelfColumns: 8 }), true)
-    const settings = currentSettings()
-    assert.equal(settings.defaultLibraryTab, 'tv')
-    assert.equal(settings.forYouColumns, 8)
-  })
+const RETIRED = [
+  // Renamed, then removed.
+  'defaultShelfTab',
+  'shelfColumns',
+  // The old customisable masthead.
+  'archiveName',
+  'archiveItalicWordIndices',
+  // Removed to keep Settings simple; their behaviour is fixed now.
+  'statusBadgeShape',
+  'statusBadgeSize',
+  'statusBadgePosition',
+  'statusBadgeIcon',
+  'statusBadgeShadow',
+  'posterQuality',
+  'forYouColumns',
+  'dateStyle',
+  'defaultLibraryTab',
+  'defaultSort',
+  'openAfterAdd',
+  'defaultWatchDate',
+  'blurEpisodeCovers',
+]
 
-  it('prefers the new key when both are present', () => {
-    importSettings({ defaultLibraryTab: 'movie', defaultShelfTab: 'tv', forYouColumns: 4, shelfColumns: 9 })
-    assert.equal(currentSettings().defaultLibraryTab, 'movie')
-    assert.equal(currentSettings().forYouColumns, 4)
-  })
-
-  it('does not write the old keys back out', () => {
+describe('retired settings', () => {
+  it('are dropped from saved settings and never written back out', () => {
+    const old: Record<string, unknown> = {
+      defaultShelfTab: 'tv',
+      shelfColumns: 8,
+      archiveName: 'My Film Diary',
+      archiveItalicWordIndices: [1],
+      statusBadgeShape: 'square',
+      statusBadgeSize: 'small',
+      statusBadgePosition: 'bottom-left',
+      statusBadgeIcon: true,
+      statusBadgeShadow: true,
+      posterQuality: 'saver',
+      forYouColumns: 4,
+      dateStyle: 'absolute',
+      defaultLibraryTab: 'movie',
+      defaultSort: 'title',
+      openAfterAdd: true,
+      defaultWatchDate: 'blank',
+      blurEpisodeCovers: true,
+    }
+    assert.equal(importSettings(old), true)
     const backup = settingsForBackup()
-    assert.equal('defaultShelfTab' in backup, false)
-    assert.equal('shelfColumns' in backup, false)
-  })
-})
-
-describe('retired masthead settings', () => {
-  it('drops the old archive name keys instead of carrying them along', () => {
-    importSettings({ archiveName: 'My Film Diary', archiveItalicWordIndices: [1] })
-    const backup = settingsForBackup()
-    assert.equal('archiveName' in backup, false)
-    assert.equal('archiveItalicWordIndices' in backup, false)
+    for (const key of RETIRED) assert.equal(key in backup, false, `${key} should be retired`)
   })
 })

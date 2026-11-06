@@ -214,18 +214,15 @@ export function StatusBadge({
   showIcon?: boolean
   shadow?: boolean
 }) {
-  const shapeSetting = useSetting('statusBadgeShape')
-  const sizeSetting = useSetting('statusBadgeSize')
-  const iconSetting = useSetting('statusBadgeIcon')
-  const shadowSetting = useSetting('statusBadgeShadow')
   const roundPosters = useSetting('roundPosters')
   const s = STATUS_BADGE[status] ?? STATUS_BADGE.planned
   const dotColor = s.dot ?? STATUS_DOT_CLASS[status] ?? STATUS_DOT_CLASS.planned
 
-  const currentShape = shape ?? shapeSetting
-  const currentSize = size ?? sizeSetting
-  const currentShowIcon = showIcon ?? iconSetting
-  const currentShadow = shadow ?? shadowSetting
+  // The badge look is fixed (it used to be a setting): a medium circle, no icon, no shadow.
+  const currentShape = shape ?? 'circle'
+  const currentSize = size ?? 'medium'
+  const currentShowIcon = showIcon ?? false
+  const currentShadow = shadow ?? false
 
   const shadowClass = currentShadow ? 'shadow-[0_2px_8px_rgba(0,0,0,0.35)]' : 'shadow-none'
 
@@ -717,41 +714,32 @@ export const Poster = memo(function Poster({
   eager?: boolean
   movieLabel?: string
 }) {
-  // Per-key subscriptions: a change to an unrelated setting (typing the
-  // archive name, dragging a colour) must not re-render every poster.
-  const posterQuality = useSetting('posterQuality')
+  // Per-key subscriptions: a change to an unrelated setting must not
+  // re-render every poster.
   const density = useSetting('density')
   const showCommunityScores = useSetting('showCommunityScores')
-  const statusBadgePosition = useSetting('statusBadgePosition')
   const posterMotion = useSetting('posterMotion')
   const defaultStatus = useSetting('defaultStatus')
-  const openAfterAdd = useSetting('openAfterAdd')
   // Posters receive their entry from the grid parent. Avoid subscribing each
   // individual card to the whole store; one library-level subscription is enough.
   const { upsert } = useLibrary(false)
   const { toast } = useToast()
   const type: MediaType = mediaTypeOf(item)
-  const saver = posterQuality === 'saver'
   const customPoster = entry?.customPoster ?? null
-  const src = customPoster ?? img(item.poster_path, saver ? 'w185' : 'w342')
-  const srcSet = customPoster ? undefined : saver
-    ? `${img(item.poster_path, 'w185')} 185w`
+  const src = customPoster ?? img(item.poster_path, 'w342')
+  const srcSet = customPoster
+    ? undefined
     : `${img(item.poster_path, 'w185')} 185w, ${img(item.poster_path, 'w342')} 342w, ${img(item.poster_path, 'w500')} 500w`
   const compact = density === 'compact'
   const pct = entry ? progress(entry) : 0
   const community =
     showCommunityScores && item.vote_average > 0 ? item.vote_average.toFixed(1) : null
-  const badgePositionClass = {
-    'top-left': 'left-2.5 top-2.5',
-    'top-right': 'right-2.5 top-2.5',
-    'bottom-left': 'bottom-2.5 left-2.5',
-    'bottom-right': 'bottom-2.5 right-2.5',
-  }[statusBadgePosition]
+  const badgePositionClass = 'right-2.5 top-2.5'
 
   const art = usePosterArt(src, srcSet || undefined, {
     lazy: !eager,
     // Custom posters fall back to the TMDb art; TMDb art to a smaller size.
-    fallbackSrc: customPoster ? img(item.poster_path, 'w342') : saver ? null : img(item.poster_path, 'w185'),
+    fallbackSrc: customPoster ? img(item.poster_path, 'w342') : img(item.poster_path, 'w185'),
   })
   const artPending = art.status === 'loading' && (!art.lazy || art.shouldLoad)
   const [showArtLoader, setShowArtLoader] = useState(false)
@@ -827,7 +815,6 @@ export const Poster = memo(function Poster({
                 }
                 upsert(type, item.id, { title: titleOf(item), poster: item.poster_path, year: yearOf(item), status: defaultStatus })
                 toast(`${titleOf(item)} added to your library`, 'success')
-                if (openAfterAdd) onOpen(type, item.id, item)
               }}
               className="press flex h-6 w-6 cursor-pointer items-center justify-center bg-[var(--primary)] text-primary-foreground opacity-0 shadow-md transition-all duration-200 hover:scale-110 hover:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
             >

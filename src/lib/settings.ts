@@ -21,72 +21,41 @@ export const LANGUAGES: { id: string; label: string }[] = [
   { id: 'zh-CN', label: '中文' },
 ]
 
-const TAB_IDS = ['all', 'movie', 'tv', 'favorites'] as const
-const SORT_IDS = ['added', 'lastWatched', 'title', 'rating', 'year', 'status'] as const
 
-export type StatusBadgeShape = 'circle' | 'square' | 'text'
-export type StatusBadgeSize = 'small' | 'medium' | 'large'
-export type StatusBadgePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 
 export type Settings = {
   theme: ThemePreference
   density: 'comfortable' | 'compact'
   hideSpoilers: boolean
-  blurEpisodeCovers: boolean
   hideEpisodeCovers: boolean
   showSpecials: boolean
   autoCompleteSeries: boolean
   posterMotion: boolean
   libraryColumns: number
   discoverColumns: number
-  forYouColumns: number
   includeAdult: boolean
   showNavHints: boolean
   defaultStatus: StartingStatus
-  openAfterAdd: boolean
-  defaultWatchDate: 'today' | 'blank'
-  defaultLibraryTab: (typeof TAB_IDS)[number]
-  defaultSort: (typeof SORT_IDS)[number]
   showCommunityScores: boolean
-  dateStyle: 'absolute' | 'relative'
-  posterQuality: 'standard' | 'saver'
   metadataLanguage: string
   roundPosters: boolean
-  statusBadgeShape: StatusBadgeShape
-  statusBadgeSize: StatusBadgeSize
-  statusBadgePosition: StatusBadgePosition
-  statusBadgeIcon: boolean
-  statusBadgeShadow: boolean
 }
 
 const DEFAULTS: Settings = {
   theme: DEFAULT_THEME,
   density: 'comfortable',
   hideSpoilers: false,
-  blurEpisodeCovers: false,
   hideEpisodeCovers: false,
   showSpecials: true,
   autoCompleteSeries: true,
   posterMotion: true,
   roundPosters: false,
-  statusBadgeShape: 'circle',
-  statusBadgeSize: 'large',
-  statusBadgePosition: 'top-left',
-  statusBadgeIcon: false,
-  statusBadgeShadow: true,
   libraryColumns: 6,
   discoverColumns: 7,
-  forYouColumns: 6,
   includeAdult: false,
   showNavHints: true,
   defaultStatus: 'planned',
-  openAfterAdd: false,
-  defaultWatchDate: 'today',
-  defaultLibraryTab: 'all',
-  defaultSort: 'added',
   showCommunityScores: false,
-  dateStyle: 'absolute',
-  posterQuality: 'standard',
   metadataLanguage: 'en-US',
 }
 
@@ -106,51 +75,13 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
   out.hideSpoilers = !!s.hideSpoilers
   out.hideEpisodeCovers = !!s.hideEpisodeCovers
   out.showSpecials = s.showSpecials !== false
-  out.blurEpisodeCovers = !!s.blurEpisodeCovers && !out.hideEpisodeCovers
   out.autoCompleteSeries = s.autoCompleteSeries !== false
   out.posterMotion = s.posterMotion !== false
   out.showNavHints = s.showNavHints !== false
-  out.openAfterAdd = !!s.openAfterAdd
   out.showCommunityScores = !!s.showCommunityScores
   if ((STARTING_STATUS_IDS as readonly string[]).includes(s.defaultStatus as string)) {
     out.defaultStatus = s.defaultStatus as StartingStatus
   }
-  if (s.defaultWatchDate === 'today' || s.defaultWatchDate === 'blank') out.defaultWatchDate = s.defaultWatchDate
-  // `defaultShelfTab` is the pre-rename key; a saved value still applies.
-  const libraryTab = s.defaultLibraryTab ?? s.defaultShelfTab
-  if ((TAB_IDS as readonly string[]).includes(libraryTab as string)) {
-    out.defaultLibraryTab = libraryTab as Settings['defaultLibraryTab']
-  }
-  if ((SORT_IDS as readonly string[]).includes(s.defaultSort as string)) {
-    out.defaultSort = s.defaultSort as Settings['defaultSort']
-  }
-  if (s.dateStyle === 'absolute' || s.dateStyle === 'relative') out.dateStyle = s.dateStyle
-  if (s.posterQuality === 'standard' || s.posterQuality === 'saver') out.posterQuality = s.posterQuality
-  if (typeof s.metadataLanguage === 'string' && LANGUAGES.some((l) => l.id === s.metadataLanguage)) {
-    out.metadataLanguage = s.metadataLanguage
-  }
-  out.libraryColumns = clamp(s.libraryColumns, 3, 10, DEFAULTS.libraryColumns)
-  out.discoverColumns = clamp(s.discoverColumns, 3, 10, DEFAULTS.discoverColumns)
-  // `shelfColumns` is the pre-rename key; a saved value still applies.
-  out.forYouColumns = clamp(s.forYouColumns ?? s.shelfColumns, 3, 10, DEFAULTS.forYouColumns)
-  out.includeAdult = !!s.includeAdult
-  out.roundPosters = !!s.roundPosters
-  if (s.statusBadgeShape === 'circle' || s.statusBadgeShape === 'square' || s.statusBadgeShape === 'text') {
-    out.statusBadgeShape = s.statusBadgeShape
-  }
-  if (s.statusBadgeSize === 'small' || s.statusBadgeSize === 'medium' || s.statusBadgeSize === 'large') {
-    out.statusBadgeSize = s.statusBadgeSize
-  }
-  if (
-    s.statusBadgePosition === 'top-left' ||
-    s.statusBadgePosition === 'top-right' ||
-    s.statusBadgePosition === 'bottom-left' ||
-    s.statusBadgePosition === 'bottom-right'
-  ) {
-    out.statusBadgePosition = s.statusBadgePosition
-  }
-  out.statusBadgeIcon = !!s.statusBadgeIcon
-  out.statusBadgeShadow = s.statusBadgeShadow !== false
   return out
 }
 
@@ -164,6 +95,10 @@ const RETIRED_KEYS = new Set([
   'chartStyle', 'customColors', 'episodeWatchedColor', 'defaultShelfTab', 'shelfColumns',
   // The customisable home masthead, replaced by a greeting.
   'archiveName', 'archiveItalicWordIndex', 'archiveItalicWordIndices',
+  // Settings removed to keep the panel simple; their behaviour is now fixed.
+  'statusBadgeShape', 'statusBadgeSize', 'statusBadgePosition', 'statusBadgeIcon', 'statusBadgeShadow',
+  'posterQuality', 'forYouColumns', 'dateStyle', 'defaultLibraryTab', 'defaultSort', 'openAfterAdd',
+  'defaultWatchDate', 'blurEpisodeCovers',
 ])
 /** The settings endpoint accepts ~10 KB per key and ~256 KB per request, so
  *  unknown keys are bounded here too — an oversized stray value would
@@ -497,25 +432,9 @@ export function useSettingsHydrated(): boolean {
  * sanitizer as stored settings; unknown keys are kept only within the usual
  * bounds. Returns false if the payload was unusable.
  */
-/** Keys renamed over time: old name → current name. */
-const RENAMED_KEYS: Record<string, keyof Settings> = {
-  defaultShelfTab: 'defaultLibraryTab',
-  shelfColumns: 'forYouColumns',
-}
-
-/** Copy values saved under old key names onto the current names. */
-function upgradeRenamedKeys(raw: Record<string, unknown>): Record<string, unknown> {
-  const out = { ...raw }
-  for (const [from, to] of Object.entries(RENAMED_KEYS)) {
-    if (from in out && !(to in out)) out[to] = out[from]
-  }
-  return out
-}
-
 export function importSettings(raw: unknown): boolean {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false
-  // An older backup's values must win over current ones, so rename before merging.
-  const incoming = upgradeRenamedKeys(raw as Record<string, unknown>)
+  const incoming = raw as Record<string, unknown>
   stashExtras(incoming, { merge: true })
   cache = sanitize({ ...cache, ...(incoming as Partial<Settings>) })
   try {
@@ -551,7 +470,7 @@ export function useSettings() {
     let sanitized: Settings[K] = value
     // Validate per-key
     if (key === 'theme') sanitized = resolveThemePreference(value) as Settings[K]
-    if ((key === 'libraryColumns' || key === 'discoverColumns' || key === 'forYouColumns') && typeof value === 'number') {
+    if ((key === 'libraryColumns' || key === 'discoverColumns') && typeof value === 'number') {
       sanitized = clamp(value as unknown as number, 3, 10, (DEFAULTS as Record<string, unknown>)[key] as number) as Settings[K]
     }
     if ((key === 'density' && value !== 'comfortable' && value !== 'compact')) {

@@ -1202,7 +1202,7 @@ function EditModal({
   useFocusTrap(boxRef, !confirmDiscard && !confirmResetProgress)
   const closeTimer = useRef<number | null>(null)
   const { toast } = useToast()
-  const prefillToday = useSettings().settings.defaultWatchDate === 'today'
+  const prefillToday = true
   // See StatusModal: keep close identity stable across parent re-renders.
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -2337,7 +2337,7 @@ function Seasons({
                                 height={104}
                                 className={`h-full w-full object-cover transition-all duration-300 ${
                                   done ? 'opacity-60 saturate-[0.7]' : 'opacity-100'
-                                } ${settings.blurEpisodeCovers ? 'scale-110 blur-sm' : ''}`}
+                                }`}
                               />
                             ) : (
                               <span className="flex h-full items-center justify-center font-sans text-[9px] uppercase tracking-[0.12em] text-muted-foreground">

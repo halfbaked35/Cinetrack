@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { importSettings, LANGUAGES, settingsForBackup, useSettings } from '../lib/settings'
-import type { StatusBadgePosition } from '../lib/settings'
 import { buildBackup, entryKey, loggedEpisodeCount, MAX_LIBRARY_FILE_BYTES, minutesWatched, parseLibraryImport, useLibrary, useLibraryStatus } from '../lib/library'
-import { Chip, CloseButton, ConfirmDialog, SETTINGS_PANEL_ID, StatusBadge, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap } from './ui'
+import { CloseButton, ConfirmDialog, SETTINGS_PANEL_ID, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap } from './ui'
 import { useToast } from './Toast'
 import ThemeToggle from './ThemeToggle'
 
@@ -121,7 +120,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
   const episodes = entries.reduce((s, e) => s + loggedEpisodeCount(e), 0)
   const minutes = minutesWatched(entries)
   const hours = Math.round(minutes / 60)
-  const days = (minutes / 1440).toFixed(1)
 
   return (
     <>
@@ -138,354 +136,105 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
         id={SETTINGS_PANEL_ID}
         role="dialog"
         aria-modal="true"
-        aria-label="Settings"
+        aria-labelledby="settings-title"
         inert={!open}
         style={{ scrollPaddingTop: '4rem' }}
-        className="drawer-sheet quiet-scroll fixed right-0 top-0 z-50 h-full w-full max-w-[420px] overflow-y-auto border-l border-border bg-background"
+        className="drawer-sheet quiet-scroll fixed right-0 top-0 z-50 h-full w-full max-w-[400px] overflow-y-auto border-l border-border bg-background"
         data-open={shown}
       >
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
-          <h2 className="rule-label">Settings</h2>
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/95 px-5 py-3 backdrop-blur">
+          <h2 id="settings-title" className="font-display text-[24px] italic leading-none">Settings</h2>
           <CloseButton onClick={onClose} label="Close settings" />
         </header>
 
         <div className="divide-y divide-border">
-          <Group title="Appearance">
-            <ThemeToggle value={settings.theme} onChange={(theme) => set('theme', theme)} />
-          </Group>
+          <Section title="Appearance">
+            <Row label="Theme" hint={settings.theme === 'system' ? 'Matches your system' : settings.theme === 'noir' ? 'Dark' : 'Light'}>
+              <ThemeToggle value={settings.theme} onChange={(theme) => set('theme', theme)} />
+            </Row>
+            <SwitchRow label="Compact density" value={settings.density === 'compact'} onChange={(v) => set('density', v ? 'compact' : 'comfortable')} />
+            <SwitchRow label="Rounded posters" value={settings.roundPosters} onChange={(v) => set('roundPosters', v)} />
+            <SwitchRow label="Poster motion" hint="Lift and tilt on hover" value={settings.posterMotion} onChange={(v) => set('posterMotion', v)} />
+            <SwitchRow label="Shortcut hints" value={settings.showNavHints} onChange={(v) => set('showNavHints', v)} />
+          </Section>
 
-          <Group title="Layout & display">
-            <Toggle
-              label="Compact density"
-              note="Smaller titles under posters and a denser default grid"
-              value={settings.density === 'compact'}
-              onChange={(v) => set('density', v ? 'compact' : 'comfortable')}
-            />
-            <Toggle
-              label="Poster motion"
-              note="Lift and zoom posters on hover"
-              value={settings.posterMotion}
-              onChange={(v) => set('posterMotion', v)}
-            />
-            <Toggle
-              label="Shortcut hints"
-              value={settings.showNavHints}
-              onChange={(v) => set('showNavHints', v)}
-            />
-            <NumberChoices
-              label="Library items per row"
-              value={settings.libraryColumns}
-              min={3}
-              max={10}
-              onChange={(v) => set('libraryColumns', v)}
-            />
-            <NumberChoices
-              label="Discover items per row"
-              value={settings.discoverColumns}
-              min={3}
-              max={10}
-              onChange={(v) => set('discoverColumns', v)}
-            />
-            <NumberChoices
-              label="For You suggestions per row"
-              note="Each category stacks two rows"
-              value={settings.forYouColumns}
-              min={3}
-              max={10}
-              onChange={(v) => set('forYouColumns', v)}
-            />
-            <OptionsRow
-              label="Poster image quality"
-              note="Data-saver fetches smaller artwork"
-              value={settings.posterQuality}
-              options={[
-                { id: 'standard', label: 'Standard' },
-                { id: 'saver', label: 'Data-saver' },
-              ]}
-              onChange={(v) => set('posterQuality', v)}
-            />
-            <Toggle
-              label="Rounded posters"
-              note="Round corners on film and television poster artwork"
-              value={settings.roundPosters}
-              onChange={(v) => set('roundPosters', v)}
-            />
-            <div className="overflow-hidden border border-border bg-card/30">
-              <div className="space-y-2.5 border-b border-border bg-secondary/35 px-3.5 py-3">
-                <div>
-                  <h4 className="font-sans text-[10px] font-medium uppercase tracking-[0.16em]">Status badge</h4>
-                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">Customize its look across your library</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Status badge preview">
-                  <StatusBadge status="watched" />
-                  <StatusBadge status="watching" />
-                  <StatusBadge status="planned" />
-                  <StatusBadge status="dropped" />
-                </div>
-              </div>
-              <div className="space-y-4 p-3.5">
-                <PositionChoices
-                  value={settings.statusBadgePosition}
-                  onChange={(value) => set('statusBadgePosition', value)}
-                />
-                <OptionsRow
-                  label="Style"
-                  value={settings.statusBadgeShape}
-                  options={[
-                    { id: 'circle', label: 'Circle' },
-                    { id: 'square', label: 'Square' },
-                    { id: 'text', label: 'Text' },
-                  ]}
-                  onChange={(v) => set('statusBadgeShape', v)}
-                />
-                <OptionsRow
-                  label="Size"
-                  value={settings.statusBadgeSize}
-                  options={[
-                    { id: 'small', label: 'Small' },
-                    { id: 'medium', label: 'Medium' },
-                    { id: 'large', label: 'Large' },
-                  ]}
-                  onChange={(v) => set('statusBadgeSize', v)}
-                />
-                <div className="space-y-3 border-t border-border pt-3">
-                  <Toggle
-                    label="Icons"
-                    value={settings.statusBadgeIcon}
-                    onChange={(v) => set('statusBadgeIcon', v)}
-                  />
-                  <Toggle
-                    label="Shadow"
-                    value={settings.statusBadgeShadow}
-                    onChange={(v) => set('statusBadgeShadow', v)}
-                  />
-                </div>
-              </div>
-            </div>
-            <OptionsRow
-              label="Ledger dates"
-              note="How viewing dates read in Activity"
-              value={settings.dateStyle}
-              options={[
-                { id: 'absolute', label: 'Absolute' },
-                { id: 'relative', label: 'Relative' },
-              ]}
-              onChange={(v) => set('dateStyle', v)}
-            />
-            <Toggle
-              label="Community scores"
-              note="Show IMDb vote averages beside release years."
-              value={settings.showCommunityScores}
-              onChange={(v) => set('showCommunityScores', v)}
-            />
-          </Group>
+          <Section title="Layout">
+            <Row label="Library per row">
+              <Stepper label="Library items per row" value={settings.libraryColumns} onChange={(v) => set('libraryColumns', v)} />
+            </Row>
+            <Row label="Discover per row">
+              <Stepper label="Discover items per row" value={settings.discoverColumns} onChange={(v) => set('discoverColumns', v)} />
+            </Row>
+          </Section>
 
-          <Group title="Watch tracking">
-            <OptionsRow
-              label="Default status for new titles"
-              value={settings.defaultStatus}
-              options={[
-                { id: 'planned', label: 'Planned' },
-                { id: 'watching', label: 'Watching' },
-              ]}
-              onChange={(v) => set('defaultStatus', v)}
-            />
-            <Toggle
-              label="Open details after adding"
-              value={settings.openAfterAdd}
-              onChange={(v) => set('openAfterAdd', v)}
-            />
-            <OptionsRow
-              label="Default watch date"
-              value={settings.defaultWatchDate}
-              options={[
-                { id: 'today', label: 'Today' },
-                { id: 'blank', label: 'Blank' },
-              ]}
-              onChange={(v) => set('defaultWatchDate', v)}
-            />
-            <Toggle
-              label="Mark series Watched automatically"
-              note="Set a show to Watched when its final episode is marked."
+          <Section title="Tracking">
+            <Row label="New titles start as">
+              <Segmented
+                label="Default status for new titles"
+                value={settings.defaultStatus}
+                options={[
+                  { id: 'planned', label: 'Planned' },
+                  { id: 'watching', label: 'Watching' },
+                ]}
+                onChange={(v) => set('defaultStatus', v)}
+              />
+            </Row>
+            <SwitchRow
+              label="Finish series automatically"
+              hint="Mark Watched when the last episode is"
               value={settings.autoCompleteSeries}
               onChange={(v) => set('autoCompleteSeries', v)}
             />
-          </Group>
+            <SwitchRow label="Hide episode descriptions" value={settings.hideSpoilers} onChange={(v) => set('hideSpoilers', v)} />
+            <SwitchRow label="Episode covers" value={!settings.hideEpisodeCovers} onChange={(v) => set('hideEpisodeCovers', !v)} />
+            <SwitchRow label="Show specials" value={settings.showSpecials} onChange={(v) => set('showSpecials', v)} />
+          </Section>
 
-          <Group title="Episode display">
-            <Toggle
-              label="Hide episode descriptions"
-              value={settings.hideSpoilers}
-              onChange={(v) => set('hideSpoilers', v)}
-            />
-            <Toggle
-              label="Show episode covers"
-              note="Display still images in TV episode lists."
-              value={!settings.hideEpisodeCovers}
-              onChange={(v) => {
-                set('hideEpisodeCovers', !v)
-                if (!v) set('blurEpisodeCovers', false)
-              }}
-            />
-            {!settings.hideEpisodeCovers && (
-              <div className="ml-3 border-l border-border pl-3">
-                <Toggle
-                  label="Blur episode covers"
-                  value={settings.blurEpisodeCovers}
-                  onChange={(v) => set('blurEpisodeCovers', v)}
-                />
-              </div>
-            )}
-            <Toggle
-              label="Show special episodes"
-              note="Include the Specials season in TV episode lists."
-              value={settings.showSpecials}
-              onChange={(v) => set('showSpecials', v)}
-            />
-          </Group>
+          <Section title="Search">
+            <Row label="Metadata language">
+              <Select
+                label="Metadata language"
+                value={settings.metadataLanguage}
+                options={LANGUAGES.map((l) => ({ id: l.id, label: l.label }))}
+                onChange={(v) => set('metadataLanguage', v)}
+              />
+            </Row>
+            <SwitchRow label="Community scores" hint="IMDb averages beside the year" value={settings.showCommunityScores} onChange={(v) => set('showCommunityScores', v)} />
+            <SwitchRow label="Adult titles" hint="In search and Discover" value={settings.includeAdult} onChange={(v) => set('includeAdult', v)} />
+          </Section>
 
-          <Group title="Library defaults">
-            <OptionsRow
-              label="Default library tab"
-              value={settings.defaultLibraryTab}
-              options={[
-                { id: 'all', label: 'All' },
-                { id: 'movie', label: 'Films' },
-                { id: 'tv', label: 'TV' },
-                { id: 'favorites', label: 'Favourites' },
-              ]}
-              onChange={(v) => set('defaultLibraryTab', v)}
-            />
-            <OptionsRow
-              label="Default sort order"
-              value={settings.defaultSort}
-              options={[
-                { id: 'added', label: 'Recently added' },
-                { id: 'lastWatched', label: 'Last watched' },
-                { id: 'title', label: 'A–Z' },
-                { id: 'rating', label: 'My rating' },
-                { id: 'year', label: 'Year' },
-                { id: 'status', label: 'Status' },
-              ]}
-              onChange={(v) => set('defaultSort', v)}
-            />
-          </Group>
-
-          <Group title="Search & catalogue">
-            <Toggle
-              label="Show adult titles"
-              note="Include adult-rated films and series in search and discover results."
-              value={settings.includeAdult}
-              onChange={(v) => set('includeAdult', v)}
-            />
-            <div>
-              <span className="block text-[13px]">Metadata language</span>
-              <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">Titles and synopses served by TMDb</span>
-              <div className="relative mt-2">
-                <select
-                  value={settings.metadataLanguage}
-                  onChange={(e) => set('metadataLanguage', e.target.value)}
-                  aria-label="Metadata language"
-                  className="h-9 w-full cursor-pointer appearance-none border border-border bg-card px-2 pr-9 text-[13px] text-foreground outline-none focus:border-[var(--primary)]"
-                >
-                  {LANGUAGES.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground"
-                >
-                  <path d="m7 10 5 5 5-5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+          <Section title="Data">
+            <p className="pb-3 pt-1 text-[12px] leading-relaxed text-muted-foreground">
+              <span className="tabular-nums text-foreground">{counts.total}</span> titles · <span className="tabular-nums">{counts.movie}</span> films ·{' '}
+              <span className="tabular-nums">{counts.tv}</span> series · <span className="tabular-nums">{episodes}</span> episodes ·{' '}
+              <span className="tabular-nums">{hours}</span> hrs
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <ActionButton onClick={exportLibrary}>Export backup</ActionButton>
+              <ActionButton disabled={!hydrated} onClick={() => fileRef.current?.click()}>
+                Restore backup
+              </ActionButton>
+              <input
+                ref={fileRef}
+                type="file"
+                tabIndex={-1}
+                aria-hidden="true"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) void importLibrary(file)
+                  event.target.value = ''
+                }}
+              />
             </div>
-          </Group>
-
-          <Group title="Library data">
-            <div className="space-y-2">
-              <div className="rule-label text-[10px]">Library overview</div>
-              <dl className="grid grid-cols-3 gap-2 border border-border bg-card p-3">
-                <div>
-                  <dt className="rule-label text-[9px]">Films</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{counts.movie}</dd>
-                </div>
-                <div>
-                  <dt className="rule-label text-[9px]">Series</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{counts.tv}</dd>
-                </div>
-                <div>
-                  <dt className="rule-label text-[9px]">Total</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{counts.total}</dd>
-                </div>
-                <div>
-                  <dt className="rule-label text-[9px]">Episodes</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{episodes}</dd>
-                </div>
-                <div>
-                  <dt className="rule-label text-[9px]">Hours</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{hours}</dd>
-                </div>
-                <div>
-                  <dt className="rule-label text-[9px]">Days</dt>
-                  <dd className="mt-1 font-display text-[26px] leading-none tabular-nums text-foreground">{days}</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <div className="rule-label mb-1 text-[10px]">Backup & restore</div>
-              <p className="mb-2 text-[12px] leading-relaxed text-muted-foreground">
-                A backup holds your library and preferences. Restoring merges it into the current library; nothing is deleted.
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={exportLibrary}
-                  className="press flex items-center justify-center border border-border bg-card py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-foreground hover:border-[var(--foreground)] hover:bg-background"
-                >
-                  Export backup
-                </button>
-                <button
-                  type="button"
-                  disabled={!hydrated}
-                  onClick={() => fileRef.current?.click()}
-                  className="press flex items-center justify-center border border-border bg-card py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-foreground hover:border-[var(--foreground)] hover:bg-background"
-                >
-                  Restore backup
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  accept="application/json,.json"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) void importLibrary(file)
-                    event.target.value = ''
-                  }}
-                />
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-border">
-              <div className="rule-label mb-2 text-[10px] text-[var(--destructive)]">Danger zone</div>
-              <button
-                type="button"
-                disabled={!hydrated || entries.length === 0}
-                onClick={() => setConfirmWipe(true)}
-                className="press flex w-full items-center justify-center border border-[var(--destructive)] bg-[var(--destructive)] py-2 font-sans text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--destructive-foreground)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Erase entire library
-              </button>
-            </div>
-          </Group>
+            <p className="pt-2 text-[11px] leading-relaxed text-muted-foreground">Restoring merges into your library; nothing is deleted.</p>
+            <Row label="Erase library" hint="You can undo right after">
+              <ActionButton tone="danger" disabled={!hydrated || entries.length === 0} onClick={() => setConfirmWipe(true)}>
+                Erase…
+              </ActionButton>
+            </Row>
+          </Section>
         </div>
 
         <ConfirmDialog
@@ -506,31 +255,50 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
   )
 }
 
-function Group({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
+/* ------------------------------------------------------------------
+   Compact settings controls: one row per setting, label left, control
+   right. Every control is keyboard operable and labelled.
+   ------------------------------------------------------------------ */
+
+function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="px-6 py-6">
-      <div className="mb-4">
-        <h3 className="font-display text-[22px] leading-none">{title}</h3>
+    <section className="px-5 py-4">
+      <div className="mb-1.5 flex min-h-6 items-center justify-between gap-3">
+        <h3 className="rule-label">{title}</h3>
+        {aside}
       </div>
-      <div className="space-y-4">{children}</div>
+      <div>{children}</div>
     </section>
   )
 }
 
-function Toggle({
+function Label({ label, hint, id }: { label: string; hint?: string; id?: string }) {
+  return (
+    <span className="min-w-0">
+      <span id={id} className="block text-[13px] leading-snug text-foreground">{label}</span>
+      {hint && <span className="block text-[11px] leading-snug text-muted-foreground">{hint}</span>}
+    </span>
+  )
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-4 py-1">
+      <Label label={label} hint={hint} />
+      <div className="shrink-0">{children}</div>
+    </div>
+  )
+}
+
+/** The whole row is the switch, so it is an easy target on touch screens. */
+function SwitchRow({
   label,
-  note,
+  hint,
   value,
   onChange,
 }: {
   label: string
-  note?: string
+  hint?: string
   value: boolean
   onChange: (v: boolean) => void
 }) {
@@ -540,20 +308,18 @@ function Toggle({
       role="switch"
       aria-checked={value}
       onClick={() => onChange(!value)}
-      className="flex w-full items-center justify-between gap-4 text-left"
+      className="group flex min-h-10 w-full items-center justify-between gap-4 py-1 text-left"
     >
-      <span>
-        <span className="block text-[13px]">{label}</span>
-        {note && <span className="block text-[11px] leading-relaxed text-muted-foreground">{note}</span>}
-      </span>
+      <Label label={label} hint={hint} />
       <span
-        className={`relative box-border block h-5 w-10 shrink-0 border transition-colors ${
-          value ? 'border-[var(--primary)] bg-[var(--primary)]' : 'border-[var(--input)] bg-secondary'
+        aria-hidden="true"
+        className={`relative block h-[18px] w-8 shrink-0 border transition-colors ${
+          value ? 'border-[var(--primary)] bg-[var(--primary)]' : 'border-[var(--input)] bg-secondary group-hover:border-foreground'
         }`}
       >
         <span
-          className={`absolute left-0 top-[2px] block h-[14px] w-[14px] transition-transform duration-200 ${
-            value ? 'translate-x-[22px] bg-[var(--primary-foreground)]' : 'translate-x-[2px] bg-[var(--muted-foreground)]'
+          className={`absolute left-0 top-[2px] block h-3 w-3 transition-transform duration-200 ${
+            value ? 'translate-x-[16px] bg-[var(--primary-foreground)]' : 'translate-x-[2px] bg-[var(--muted-foreground)]'
           }`}
         />
       </span>
@@ -561,142 +327,136 @@ function Toggle({
   )
 }
 
-function PositionChoices({
-  value,
-  onChange,
-}: {
-  value: StatusBadgePosition
-  onChange: (value: StatusBadgePosition) => void
-}) {
-  const positions: { id: StatusBadgePosition; label: string; marker: string }[] = [
-    { id: 'top-left', label: 'Top left', marker: 'left-0.5 top-0.5' },
-    { id: 'top-right', label: 'Top right', marker: 'right-0.5 top-0.5' },
-    { id: 'bottom-left', label: 'Bottom left', marker: 'bottom-0.5 left-0.5' },
-    { id: 'bottom-right', label: 'Bottom right', marker: 'bottom-0.5 right-0.5' },
-  ]
-
-  return (
-    <div>
-      <div>
-        <span className="block text-[13px]">Position</span>
-        <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">Choose a corner for the badge.</span>
-      </div>
-      <div
-        className="mt-2 grid grid-cols-2 gap-1.5"
-        role="radiogroup"
-        aria-label="Status badge position"
-        onKeyDown={handleRadioGroupKeyDown}
-      >
-        {positions.map((position) => {
-          const active = value === position.id
-          return (
-            <button
-              key={position.id}
-              type="button"
-              role="radio"
-              aria-label={position.label}
-              aria-checked={active}
-              tabIndex={active ? 0 : -1}
-              onClick={() => onChange(position.id)}
-              className={`press flex min-h-10 items-center gap-2.5 border px-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] ${
-                active
-                  ? 'border-[var(--primary)] bg-[var(--primary)] text-primary-foreground'
-                  : 'border-border text-muted-foreground hover:border-[var(--primary)] hover:text-foreground'
-              }`}
-            >
-              <span aria-hidden className="relative h-6 w-4 shrink-0 border border-current/50 bg-background/30">
-                <span className={`absolute h-1.5 w-1.5 rounded-full bg-[var(--status-watched)] ${position.marker}`} />
-              </span>
-              <span className="font-sans text-[10px] font-medium uppercase tracking-[0.12em]">{position.label}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-/** Labelled single-choice chip row bound to a string-union setting. */
-function OptionsRow<T extends string>({
+/** A small segmented control for two or three choices. */
+function Segmented<T extends string>({
   label,
-  note,
   value,
   options,
   onChange,
 }: {
   label: string
-  note?: string
   value: T
   options: { id: T; label: string }[]
   onChange: (v: T) => void
 }) {
   return (
-    <div>
-      <span className="block text-[13px]">{label}</span>
-      {note && <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{note}</span>}
-      <div className="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label={label} onKeyDown={handleRadioGroupKeyDown}>
-        {options.map((o) => (
-          <Chip key={o.id} role="radio" active={value === o.id} onClick={() => onChange(o.id)}>
+    <div role="radiogroup" aria-label={label} onKeyDown={handleRadioGroupKeyDown} className="inline-flex gap-0.5 border border-border bg-muted p-0.5">
+      {options.map((o) => {
+        const active = value === o.id
+        return (
+          <button
+            key={o.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
+            onClick={() => onChange(o.id)}
+            className={`press h-7 min-w-8 px-2.5 font-sans text-[11px] font-medium transition-colors focus-visible:outline-offset-[-2px] ${
+              active
+                ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)] ring-1 ring-border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
             {o.label}
-          </Chip>
-        ))}
-      </div>
+          </button>
+        )
+      })}
     </div>
   )
 }
 
-function NumberChoices({
+/** A compact native select, for choices that would not fit as segments. */
+function Select<T extends string>({
   label,
-  note,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: { id: T; label: string }[]
+  onChange: (v: T) => void
+}) {
+  return (
+    <span className="relative inline-block">
+      <select
+        value={value}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.value as T)}
+        className="h-8 max-w-[170px] cursor-pointer appearance-none border border-border bg-background pl-2.5 pr-7 text-[12px] text-foreground outline-none hover:border-foreground focus-visible:border-[var(--primary)]"
+      >
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground">
+        <path d="m7 10 5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
+  )
+}
+
+/** − value + for a bounded count. */
+function Stepper({
+  label,
   value,
   min = 3,
   max = 10,
   onChange,
 }: {
   label: string
-  note?: string
   value: number
   min?: number
   max?: number
   onChange: (v: number) => void
 }) {
-  const choices = Array.from({ length: max - min + 1 }, (_, index) => min + index)
-
+  const valueId = useId()
+  const step = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)))
+  const button = 'press flex size-8 items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35'
   return (
-    <div>
-      <div>
-        <span className="block text-[13px]">{label}</span>
-        {note && <span className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">{note}</span>}
-      </div>
-      <div
-        className="mt-2 grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${choices.length}, minmax(0, 1fr))` }}
-        role="radiogroup"
-        aria-label={label}
-        onKeyDown={handleRadioGroupKeyDown}
-      >
-        {choices.map((count) => {
-          const active = value === count
-          return (
-            <button
-              key={count}
-              type="button"
-              role="radio"
-              aria-label={`${count} items per row`}
-              aria-checked={active}
-              tabIndex={active ? 0 : -1}
-              onClick={() => onChange(count)}
-              className={`press flex aspect-square min-w-0 items-center justify-center border font-sans text-base font-medium tabular-nums transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)] ${
-                active
-                  ? 'border-[var(--primary)] bg-[var(--primary)] text-primary-foreground'
-                  : 'border-border bg-card text-muted-foreground hover:border-[var(--primary)] hover:text-foreground'
-              }`}
-            >
-              {count}
-            </button>
-          )
-        })}
-      </div>
+    <div role="group" aria-label={label} className="inline-flex items-center border border-border">
+      <button type="button" aria-label={`Fewer: ${label}`} aria-describedby={valueId} disabled={value <= min} onClick={() => step(-1)} className={button}>
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <path d="M3.5 8h9" />
+        </svg>
+      </button>
+      <span id={valueId} aria-live="polite" className="w-7 text-center font-sans text-[13px] font-medium tabular-nums text-foreground">
+        {value}
+      </span>
+      <button type="button" aria-label={`More: ${label}`} aria-describedby={valueId} disabled={value >= max} onClick={() => step(1)} className={button}>
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+          <path d="M3.5 8h9M8 3.5v9" />
+        </svg>
+      </button>
     </div>
+  )
+}
+
+function ActionButton({
+  children,
+  onClick,
+  disabled,
+  tone = 'default',
+}: {
+  children: ReactNode
+  onClick: () => void
+  disabled?: boolean
+  tone?: 'default' | 'danger'
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`press h-8 border px-3 font-sans text-[11px] font-medium uppercase tracking-[0.12em] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+        tone === 'danger'
+          ? 'border-[var(--destructive)] text-[var(--destructive)] hover:bg-[var(--destructive)] hover:text-[var(--destructive-foreground)]'
+          : 'border-border text-foreground hover:border-foreground'
+      }`}
+    >
+      {children}
+    </button>
   )
 }

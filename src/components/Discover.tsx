@@ -297,7 +297,7 @@ function SuggestionSection({
 }) {
   const { get } = useLibrary()
   const { settings } = useSettings()
-  const columns = Math.max(1, settings.forYouColumns)
+  const columns = Math.max(1, settings.discoverColumns)
   const slots = columns * SECTION_ROWS
 
   const [pool, setPool] = useState(section.items)

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { img, type MediaType, type TmdbTitle } from '../lib/tmdb'
-import { countRewatches, formatDayMonth, formatRelativeDay, minutesWatched, progress, recentCompletions, useLibrary, useLibraryStatus, watchedCount, type Entry } from '../lib/library'
-import { useSettings } from '../lib/settings'
+import { countRewatches, formatRelativeDay, minutesWatched, progress, recentCompletions, useLibrary, useLibraryStatus, watchedCount, type Entry } from '../lib/library'
 import type { LibraryView } from './Library'
 import MonthlyChart from './MonthlyChart'
 import { CloseButton, Empty, PosterTilt, PosterTiltInline, SectionHead, ShuffleIcon, Stat, useBodyScrollLock, useFocusTrap } from './ui'
@@ -58,7 +57,6 @@ export default function Home({
 }) {
   const { entries } = useLibrary()
   const { hydrated } = useLibraryStatus()
-  const { settings } = useSettings()
 
   const stats = useMemo(() => {
     const movies = entries.filter((e) => e.mediaType === 'movie')
@@ -230,7 +228,7 @@ export default function Home({
                     <span className="flex shrink-0 items-baseline gap-3 transition-transform duration-300 group-hover:-translate-x-1 sm:gap-5">
                       <span className="font-sans text-[10px] text-[var(--accent)]">{a.label}</span>
                       <time dateTime={new Date(a.at).toISOString()} className="min-w-[3.5rem] text-right font-sans text-[10px] tabular-nums text-muted-foreground">
-                        {settings.dateStyle === 'relative' ? formatRelativeDay(a.at) : formatDayMonth(a.at)}
+                        {formatRelativeDay(a.at)}
                       </time>
                     </span>
                   </button>
@@ -318,7 +316,6 @@ export default function Home({
       {activityOpen && (
         <ActivityModal
           items={allActivity}
-          dateStyle={settings.dateStyle}
           onClose={() => setActivityOpen(false)}
           onOpenTitle={(mediaType, id) => {
             setActivityOpen(false)
@@ -346,12 +343,10 @@ export default function Home({
 
 function ActivityModal({
   items,
-  dateStyle,
   onClose,
   onOpenTitle,
 }: {
   items: ReturnType<typeof recentCompletions>
-  dateStyle: 'relative' | 'absolute'
   onClose: () => void
   onOpenTitle: (type: MediaType, id: number) => void
 }) {
@@ -411,7 +406,7 @@ function ActivityModal({
                 <span className="flex shrink-0 items-baseline gap-3 transition-transform duration-300 group-hover:-translate-x-1 sm:gap-5">
                   <span className="font-sans text-[10px] text-[var(--accent)]">{item.label}</span>
                   <time dateTime={new Date(item.at).toISOString()} className="min-w-[3.5rem] text-right font-sans text-[10px] tabular-nums text-muted-foreground">
-                    {dateStyle === 'relative' ? formatRelativeDay(item.at) : formatDayMonth(item.at)}
+                    {formatRelativeDay(item.at)}
                   </time>
                 </span>
               </button>
