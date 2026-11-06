@@ -587,25 +587,59 @@ export function usePosterArt(
   }
 }
 
-function usePosterTilt<T extends HTMLElement>() {
+const TILT_DEGREES = 12
+
+/**
+ * Pointer-driven 3D tilt. The outer element is the hit area and is never
+ * transformed; only its inner body moves. Transforming the hit area itself
+ * made the card lift out from under the cursor near its edges (hover lost →
+ * card drops → hover regained: a flicker loop) and fed its own rotated bounds
+ * back into the tilt maths, which jittered.
+ */
+function usePosterTilt<T extends HTMLElement>(enabled: boolean) {
   const cardRef = useRef<T>(null)
+  const frame = useRef(0)
+  const pending = useRef<{ x: number; y: number } | null>(null)
+
+  const write = (x: number, y: number) => {
+    const el = cardRef.current
+    if (!el) return
+    el.style.setProperty('--poster-tilt-x', `${(-y * TILT_DEGREES).toFixed(2)}deg`)
+    el.style.setProperty('--poster-tilt-y', `${(x * TILT_DEGREES).toFixed(2)}deg`)
+  }
+
+  const cancelFrame = () => {
+    if (frame.current) window.cancelAnimationFrame(frame.current)
+    frame.current = 0
+    pending.current = null
+  }
+
+  useEffect(() => cancelFrame, [])
 
   const handlePointerMove = (event: React.PointerEvent<T>) => {
-    if (event.pointerType === 'touch') return
-    const target = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('[data-poster-surface]')
-      : null
-    const bounds = (target ?? event.currentTarget).getBoundingClientRect()
+    if (!enabled || event.pointerType !== 'mouse') return
+    // The untransformed hit area gives stable bounds for the whole card.
+    const bounds = event.currentTarget.getBoundingClientRect()
     if (bounds.width === 0 || bounds.height === 0) return
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5
-    cardRef.current?.style.setProperty('--poster-tilt-x', `${(-y * 12).toFixed(2)}deg`)
-    cardRef.current?.style.setProperty('--poster-tilt-y', `${(x * 12).toFixed(2)}deg`)
+    const clamp = (v: number) => Math.min(0.5, Math.max(-0.5, v))
+    pending.current = {
+      x: clamp((event.clientX - bounds.left) / bounds.width - 0.5),
+      y: clamp((event.clientY - bounds.top) / bounds.height - 0.5),
+    }
+    // Coalesce to one style write per frame.
+    if (!frame.current) {
+      frame.current = window.requestAnimationFrame(() => {
+        frame.current = 0
+        const next = pending.current
+        pending.current = null
+        if (next) write(next.x, next.y)
+      })
+    }
   }
 
   const resetPointer = () => {
-    cardRef.current?.style.setProperty('--poster-tilt-x', '0deg')
-    cardRef.current?.style.setProperty('--poster-tilt-y', '0deg')
+    cancelFrame()
+    write(0, 0)
   }
 
   return { cardRef, handlePointerMove, resetPointer }
@@ -620,18 +654,20 @@ export function PosterTilt({
   className?: string
   style?: CSSProperties
 }) {
-  const tilt = usePosterTilt<HTMLDivElement>()
+  const motion = useSetting('posterMotion')
+  const tilt = usePosterTilt<HTMLDivElement>(motion)
 
   return (
     <div
       ref={tilt.cardRef}
       style={style}
+      data-motion={motion ? undefined : 'off'}
       onPointerMove={tilt.handlePointerMove}
       onPointerLeave={tilt.resetPointer}
       onPointerCancel={tilt.resetPointer}
       className={`poster-card-3d group ${className}`}
     >
-      {children}
+      <div className="poster-card-3d__body">{children}</div>
     </div>
   )
 }
@@ -645,18 +681,20 @@ export function PosterTiltInline({
   className?: string
   style?: CSSProperties
 }) {
-  const tilt = usePosterTilt<HTMLSpanElement>()
+  const motion = useSetting('posterMotion')
+  const tilt = usePosterTilt<HTMLSpanElement>(motion)
 
   return (
     <span
       ref={tilt.cardRef}
       style={style}
+      data-motion={motion ? undefined : 'off'}
       onPointerMove={tilt.handlePointerMove}
       onPointerLeave={tilt.resetPointer}
       onPointerCancel={tilt.resetPointer}
       className={`poster-card-3d group ${className}`}
     >
-      {children}
+      <span className="poster-card-3d__body">{children}</span>
     </span>
   )
 }
