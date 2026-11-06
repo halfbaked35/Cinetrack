@@ -851,7 +851,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
     if (!el || !gridActive) return
     const io = new IntersectionObserver((entries) => {
       if (entries[0]?.isIntersecting) loadMoreRef.current()
-    }, { rootMargin: '400px' })
+    }, { rootMargin: '0px 0px 1600px 0px' })
     io.observe(el)
     return () => io.disconnect()
   }, [results.length, gridActive, error])
@@ -964,7 +964,7 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
                   <PosterSkeleton
                     key={`init-skel-${i}`}
                     compact={settings.density === 'compact'}
-                    style={{ animationDelay: `${Math.floor(i / gridColumns) * 70}ms` }}
+                    style={{ animationDelay: `${Math.floor(i / gridColumns) * 45}ms` }}
                   />
                 ))}
               </PosterGrid>
@@ -974,9 +974,10 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
               <PosterGrid columns={settings.discoverColumns}>
                 {visibleResults.map((item, i) => {
                   const t: MediaType = (item.media_type ?? type) as MediaType
-                  const animate = activeFeedKey === feedKey && animatedRange !== null && i >= animatedRange.start && i < animatedRange.end
+                  // Only a fresh feed gets an entrance; appended pages simply appear
+                  // (their art fades in on its own), so scrolling never shimmers.
+                  const animate = activeFeedKey === feedKey && animatedRange?.start === 0 && i < animatedRange.end
                   const row = Math.floor(i / gridColumns)
-                  const firstNewRow = animatedRange ? Math.floor(animatedRange.start / gridColumns) : row
                   return (
                     <Poster
                       key={`${t}-${item.id}`}
@@ -985,21 +986,14 @@ export default function Discover({ onOpen }: { onOpen: (t: MediaType, id: number
                       onOpen={onOpen}
                       animate={animate}
                       eager={i < gridColumns * 2}
-                      style={animate ? { animationDelay: `${(row - firstNewRow) * 180}ms` } : undefined}
+                      style={animate ? { animationDelay: `${Math.min(row, 3) * 45}ms` } : undefined}
                     />
                   )
                 })}
                 {showGridSkeletons && displayResults.length > 0 && (
                   <>
-                    {Array.from({ length: (gridColumns - (displayResults.length % gridColumns)) % gridColumns }, (_, i) => (
-                      <div key={`loading-pad-${i}`} className="invisible" aria-hidden="true" />
-                    ))}
-                    {Array.from({ length: gridColumns }, (_, i) => (
-                      <PosterSkeleton
-                        key={`append-skel-${i}`}
-                        compact={settings.density === 'compact'}
-                        style={{ animationDelay: '0ms' }}
-                      />
+                    {Array.from({ length: ((gridColumns - (visibleResults.length % gridColumns)) % gridColumns) + gridColumns }, (_, i) => (
+                      <PosterSkeleton key={`append-skel-${i}`} compact={settings.density === 'compact'} />
                     ))}
                   </>
                 )}

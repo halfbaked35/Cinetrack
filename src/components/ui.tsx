@@ -518,10 +518,14 @@ export function usePosterArt(
   const shouldLoad = Boolean(source && (!lazy || nearViewport))
 
   useEffect(() => {
-    setNearViewport(!lazy)
     setUsingFallback(false)
     setStatus(url ? 'loading' : 'failed')
-  }, [url, srcSet, fallbackSrc, lazy])
+  }, [url, srcSet, fallbackSrc])
+  // Becoming eager (e.g. a resize moves a poster into the first rows) only
+  // ever starts a load; it never resets one that already finished.
+  useEffect(() => {
+    if (!lazy) setNearViewport(true)
+  }, [lazy])
 
   useEffect(() => {
     if (!lazy || nearViewport || !url) return
@@ -538,7 +542,7 @@ export function usePosterArt(
           observer.disconnect()
         }
       },
-      { rootMargin: '350px 0px' },
+      { rootMargin: '1200px 0px' },
     )
     observer.observe(target)
     return () => observer.disconnect()
@@ -751,7 +755,7 @@ export const Poster = memo(function Poster({
       setShowArtLoader(false)
       return
     }
-    const timer = window.setTimeout(() => setShowArtLoader(true), 120)
+    const timer = window.setTimeout(() => setShowArtLoader(true), 600)
     return () => window.clearTimeout(timer)
   }, [artPending])
 
@@ -787,7 +791,7 @@ export const Poster = memo(function Poster({
               height={513}
               onLoad={art.onLoad}
               onError={art.onError}
-              className={`h-full w-full object-cover transition-all duration-500 ease-out ${
+              className={`h-full w-full object-cover transition-[opacity,transform,filter] duration-300 ease-out ${
                 art.status === 'ready' ? 'opacity-100' : 'opacity-0'
               } ${posterMotion ? 'group-hover:scale-[1.03]' : ''} group-hover:brightness-110 group-hover:saturate-110`}
             />
@@ -881,7 +885,7 @@ export function PosterSkeleton({
   className?: string
 }) {
   return (
-    <div aria-hidden="true" style={style} className={`animate-plate select-none ${className}`}>
+    <div aria-hidden="true" style={style} className={`animate-fade select-none ${className}`}>
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-muted shimmer" />
       <div className="mt-2 flex w-full items-baseline justify-between gap-2">
         <div className={`h-4 w-3/4 bg-muted shimmer ${compact ? 'text-[15px]' : 'text-[17px]'}`} />
