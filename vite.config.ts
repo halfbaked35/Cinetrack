@@ -79,10 +79,8 @@ export default defineConfig({
     sourcemap: 'hidden',
     rolldownOptions: {
       output: {
-        // Only React gets its own long-cached chunk. recharts is reached solely
-        // through the lazy MonthlyChart import, so it already splits on its own;
-        // a manual "charts" group used to pull React into it and force a 365 kB
-        // preload on every page.
+        // Only React gets its own long-cached chunk; everything else splits
+        // along the app's own lazy imports.
         manualChunks(id: string) {
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'vendor'
           return undefined

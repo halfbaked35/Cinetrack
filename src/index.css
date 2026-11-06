@@ -353,6 +353,19 @@ html {
   transform-origin: left;
   animation: ct-rule 620ms var(--ease-sheet) both;
 }
+/* Chart line draws itself left to right (paths use pathLength=1). */
+@keyframes ct-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.chart-draw {
+  stroke-dasharray: 1;
+  animation: ct-draw 900ms var(--ease-sheet) both;
+}
 .animate-grow {
   transform-origin: left;
   animation: ct-grow 700ms var(--ease-sheet) both;

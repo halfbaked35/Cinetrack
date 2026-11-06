@@ -1,13 +1,13 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { img, type MediaType, type TmdbTitle } from '../lib/tmdb'
 import { countRewatches, formatDayMonth, formatRelativeDay, minutesWatched, progress, recentCompletions, useLibrary, useLibraryStatus, watchedCount, type Entry } from '../lib/library'
 import { useSettings } from '../lib/settings'
 import type { LibraryView } from './Library'
+import MonthlyChart from './MonthlyChart'
 import { CloseButton, Empty, PosterTilt, PosterTiltInline, SectionHead, ShuffleIcon, Stat, useBodyScrollLock, useFocusTrap } from './ui'
 import MastheadName from './MastheadName'
 
-const MonthlyChart = lazy(() => import('./MonthlyChart'))
 const TITLE_STOP_WORDS = new Set(['a', 'an', 'and', 'of', 'the'])
 
 // ponytail: title tokens approximate franchise membership; use collection IDs if the library stores them.
@@ -331,16 +331,7 @@ export default function Home({
       )}
 
       <div id="monthly-log" className="scroll-mt-24">
-        <Suspense
-          fallback={
-            <section aria-label="Monthly log loading">
-              <SectionHead title="Monthly log" note="Completed titles in each of the trailing twelve months." rule={false} />
-              <div className="w-full border border-border bg-card p-4 shimmer" style={{ height: 232 }} />
-            </section>
-          }
-        >
-          <MonthlyChart entries={entries} />
-        </Suspense>
+        <MonthlyChart entries={entries} />
       </div>
 
       {hydrated && !hasData && (
