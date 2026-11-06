@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ARCHIVE_NAME_MAX_LENGTH, DEFAULT_ARCHIVE_NAME, importSettings, LANGUAGES, settingsForBackup, useSettings } from '../lib/settings'
+import { importSettings, LANGUAGES, settingsForBackup, useSettings } from '../lib/settings'
 import type { StatusBadgePosition } from '../lib/settings'
 import { buildBackup, entryKey, loggedEpisodeCount, MAX_LIBRARY_FILE_BYTES, minutesWatched, parseLibraryImport, useLibrary, useLibraryStatus } from '../lib/library'
 import { Chip, CloseButton, ConfirmDialog, SETTINGS_PANEL_ID, StatusBadge, handleRadioGroupKeyDown, useBodyScrollLock, useFocusTrap } from './ui'
@@ -122,9 +122,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
   const minutes = minutesWatched(entries)
   const hours = Math.round(minutes / 60)
   const days = (minutes / 1440).toFixed(1)
-  const archiveNameLength = Array.from(settings.archiveName).length
-  const archiveWords = settings.archiveName.trim().split(/\s+/).filter(Boolean)
-  const italicWordIndices = settings.archiveItalicWordIndices
 
   return (
     <>
@@ -155,99 +152,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
         <div className="divide-y divide-border">
           <Group title="Appearance">
             <ThemeToggle value={settings.theme} onChange={(theme) => set('theme', theme)} />
-          </Group>
-
-          <Group title="Archive identity">
-            <div>
-              <label htmlFor="archive-name" className="block text-[13px]">Archive name</label>
-              <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <span id="archive-name-hint" className="text-[11px] text-muted-foreground">Shown in the home masthead</span>
-                <span
-                  id="archive-name-count"
-                  aria-label={`${archiveNameLength} of ${ARCHIVE_NAME_MAX_LENGTH} characters`}
-                  className="font-sans text-[10px] tabular-nums text-muted-foreground"
-                >
-                  {archiveNameLength}/{ARCHIVE_NAME_MAX_LENGTH}
-                </span>
-              </div>
-              <input
-                id="archive-name"
-                value={settings.archiveName}
-                onChange={(e) => set('archiveName', e.target.value)}
-                maxLength={ARCHIVE_NAME_MAX_LENGTH}
-                spellCheck={false}
-                autoComplete="off"
-                aria-describedby="archive-name-hint archive-name-count"
-                onBlur={(e) => {
-                  const normalized = e.currentTarget.value.trim()
-                  if (normalized !== settings.archiveName) set('archiveName', normalized)
-                }}
-                placeholder="Enter an archive name"
-                className="mt-2 h-10 w-full border border-border bg-card px-3 font-display text-[16px] text-foreground outline-none placeholder:font-sans placeholder:text-[13px] placeholder:text-muted-foreground focus:border-[var(--primary)] focus-visible:ring-1 focus-visible:ring-[var(--primary)]"
-              />
-              {archiveWords.length > 0 && (
-                <div className="mt-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span id="archive-highlight-label" className="block text-[13px]">Masthead highlights</span>
-                    <span className="rule-label">{italicWordIndices.length} of {archiveWords.length} selected</span>
-                  </div>
-                  <span id="archive-highlight-hint" className="mt-0.5 block text-[11px] leading-relaxed text-muted-foreground">Choose one or more words to italicize and color with your accent.</span>
-                  <div role="group" aria-labelledby="archive-highlight-label" aria-describedby="archive-highlight-hint" className="mt-2 flex flex-wrap gap-1.5">
-                    {archiveWords.map((word, index) => {
-                      const selected = italicWordIndices.includes(index)
-                      return (
-                        <button
-                          key={`${index}-${word}`}
-                          type="button"
-                          role="checkbox"
-                          aria-checked={selected}
-                          onClick={() => set('archiveItalicWordIndices', selected
-                            ? italicWordIndices.filter((wordIndex) => wordIndex !== index)
-                            : [...italicWordIndices, index])}
-                          className={`press border px-2.5 py-1.5 font-sans text-[11px] transition-colors ${
-                            selected
-                              ? 'border-[var(--primary)] bg-[var(--primary)]/10 italic text-[var(--primary)]'
-                              : 'border-border text-muted-foreground hover:border-[var(--foreground)] hover:text-foreground'
-                          }`}
-                        >
-                          {word}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="mt-1 flex justify-end gap-3">
-                    <button
-                      type="button"
-                      onClick={() => set('archiveItalicWordIndices', archiveWords.map((_, index) => index))}
-                      className="press min-h-7 font-sans text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-[var(--primary)]"
-                    >
-                      Highlight all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => set('archiveItalicWordIndices', [])}
-                      className="press min-h-7 font-sans text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-[var(--primary)]"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              )}
-              {settings.archiveName !== DEFAULT_ARCHIVE_NAME && (
-                <div className="mt-1 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      set('archiveName', DEFAULT_ARCHIVE_NAME)
-                      set('archiveItalicWordIndices', [2])
-                    }}
-                    className="press min-h-8 px-1 font-sans text-[9px] font-medium uppercase tracking-[0.12em] text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-1 focus-visible:outline-[var(--primary)]"
-                  >
-                    Reset to default
-                  </button>
-                </div>
-              )}
-            </div>
           </Group>
 
           <Group title="Layout & display">

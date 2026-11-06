@@ -26,3 +26,12 @@ describe('renamed settings keys', () => {
     assert.equal('shelfColumns' in backup, false)
   })
 })
+
+describe('retired masthead settings', () => {
+  it('drops the old archive name keys instead of carrying them along', () => {
+    importSettings({ archiveName: 'My Film Diary', archiveItalicWordIndices: [1] })
+    const backup = settingsForBackup()
+    assert.equal('archiveName' in backup, false)
+    assert.equal('archiveItalicWordIndices' in backup, false)
+  })
+})

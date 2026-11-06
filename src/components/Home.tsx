@@ -6,7 +6,7 @@ import { useSettings } from '../lib/settings'
 import type { LibraryView } from './Library'
 import MonthlyChart from './MonthlyChart'
 import { CloseButton, Empty, PosterTilt, PosterTiltInline, SectionHead, ShuffleIcon, Stat, useBodyScrollLock, useFocusTrap } from './ui'
-import MastheadName from './MastheadName'
+import Greeting from './Greeting'
 
 const TITLE_STOP_WORDS = new Set(['a', 'an', 'and', 'of', 'the'])
 
@@ -107,10 +107,7 @@ export default function Home({
       <section>
         <div className="border-b border-border pb-6">
 
-          {/* Masthead keeps the full archive name to two balanced lines. */}
-          <h1 className="mt-3 w-full max-w-full font-display text-[clamp(22px,6.2vw,92px)] leading-[0.95] tracking-tight">
-            <MastheadName name={settings.archiveName} italicWordIndices={settings.archiveItalicWordIndices} />
-          </h1>
+          <Greeting />
         </div>
         <div className="mt-8 grid grid-cols-2 gap-y-8 sm:grid-cols-3 lg:grid-cols-6">
           <Stat label="Titles held" value={stats.total} onClick={() => onLibraryNavigate({ tab: 'all', filter: 'all' })} />

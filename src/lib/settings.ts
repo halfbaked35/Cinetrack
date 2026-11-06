@@ -6,8 +6,6 @@ import { type ThemePreference, DEFAULT_THEME, applyTheme as applyThemeEngine, re
 export type { ThemeId, ThemeMeta, ThemePreference } from './theme'
 export { THEMES } from './theme'
 
-export const DEFAULT_ARCHIVE_NAME = 'The Standing Collection'
-export const ARCHIVE_NAME_MAX_LENGTH = 48
 
 export const LANGUAGES: { id: string; label: string }[] = [
   { id: 'en-US', label: 'English' },
@@ -43,8 +41,6 @@ export type Settings = {
   discoverColumns: number
   forYouColumns: number
   includeAdult: boolean
-  archiveName: string
-  archiveItalicWordIndices: number[]
   showNavHints: boolean
   defaultStatus: StartingStatus
   openAfterAdd: boolean
@@ -82,8 +78,6 @@ const DEFAULTS: Settings = {
   discoverColumns: 7,
   forYouColumns: 6,
   includeAdult: false,
-  archiveName: DEFAULT_ARCHIVE_NAME,
-  archiveItalicWordIndices: [2],
   showNavHints: true,
   defaultStatus: 'planned',
   openAfterAdd: false,
@@ -118,23 +112,6 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
   out.showNavHints = s.showNavHints !== false
   out.openAfterAdd = !!s.openAfterAdd
   out.showCommunityScores = !!s.showCommunityScores
-  if (typeof s.archiveName === 'string') {
-    out.archiveName = Array.from(s.archiveName).slice(0, ARCHIVE_NAME_MAX_LENGTH).join('')
-  }
-  const archiveWordCount = out.archiveName.trim().split(/\s+/).filter(Boolean).length
-  const legacyItalicIndex = typeof s.archiveItalicWordIndex === 'number' && Number.isInteger(s.archiveItalicWordIndex)
-    ? (s.archiveItalicWordIndex < 0 ? archiveWordCount - 1 : s.archiveItalicWordIndex)
-    : null
-  const italicIndices = Array.isArray(s.archiveItalicWordIndices)
-    ? s.archiveItalicWordIndices
-    : legacyItalicIndex == null
-      ? out.archiveItalicWordIndices
-      : [legacyItalicIndex]
-  out.archiveItalicWordIndices = archiveWordCount > 0
-    ? [...new Set(italicIndices
-      .filter((index): index is number => typeof index === 'number' && Number.isInteger(index) && index >= 0)
-      .map((index) => Math.min(index, archiveWordCount - 1)))]
-    : []
   if ((STARTING_STATUS_IDS as readonly string[]).includes(s.defaultStatus as string)) {
     out.defaultStatus = s.defaultStatus as StartingStatus
   }
@@ -183,7 +160,11 @@ function sanitize(s: Partial<Settings> & Record<string, unknown>): Settings {
  */
 let extraKeys: Record<string, unknown> = {}
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
-const RETIRED_KEYS = new Set(['chartStyle', 'archiveItalicWordIndex', 'customColors', 'episodeWatchedColor', 'defaultShelfTab', 'shelfColumns'])
+const RETIRED_KEYS = new Set([
+  'chartStyle', 'customColors', 'episodeWatchedColor', 'defaultShelfTab', 'shelfColumns',
+  // The customisable home masthead, replaced by a greeting.
+  'archiveName', 'archiveItalicWordIndex', 'archiveItalicWordIndices',
+])
 /** The settings endpoint accepts ~10 KB per key and ~256 KB per request, so
  *  unknown keys are bounded here too — an oversized stray value would
  *  otherwise produce a body the server resets, wedging the retry loop. */
