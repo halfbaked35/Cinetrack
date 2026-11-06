@@ -355,29 +355,11 @@ html {
 }
 /* ------------------------------------------------------------------
    Landing page: an opening-titles sequence. The posters drift behind the
-   main title like the opening shot, and each credit settles into focus as
+   main title like the opening shot, and each credit settles into place as
    it scrolls into frame. Content is visible by default; motion is added
    only where the browser supports scroll timelines and motion is welcome.
+   The curved poster row animates itself (TiltedGridHero, Web Animations).
    ------------------------------------------------------------------ */
-/* The curved poster row (TiltedGridHero): each tile turns round the
-   cylinder's axis. Geometry comes from per-tile custom properties, so no
-   per-instance <style> is needed (the CSP forbids injected styles). */
-@keyframes tgh-orbit {
-  from {
-    transform: translateZ(var(--tgh-r)) rotateY(calc(var(--tgh-sweep) * -1)) translateZ(calc(var(--tgh-r) * -1));
-  }
-  to {
-    transform: translateZ(var(--tgh-r)) rotateY(var(--tgh-sweep)) translateZ(calc(var(--tgh-r) * -1));
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  /* Paused, not removed: every tile is already placed by its delay, so the row freezes as a still. */
-  .tgh-tile {
-    animation-play-state: paused !important;
-    /* Keep the real duration: the app-wide reduced-motion rule shortens it to 1ms, which would stack every tile. */
-    animation-duration: var(--tgh-duration) !important;
-  }
-}
 /* Opacity and transform only: both run on the compositor, so scrolling
    never repaints text (an animated blur did, every frame). */
 @keyframes ct-credit {

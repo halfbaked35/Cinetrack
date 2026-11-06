@@ -151,8 +151,8 @@ function Footage({ items, loading }: { items: TmdbTitle[]; loading: boolean }) {
     <TiltedGridHero
       images={images}
       aspectRatio={16 / 9}
-      tileHeight={50}
-      axis={50}
+      tileHeight={56}
+      axis={57}
       gap={4}
       curve={62}
       fade={10}
